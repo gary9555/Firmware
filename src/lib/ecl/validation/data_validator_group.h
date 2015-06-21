@@ -41,7 +41,7 @@
 
 #pragma once
 
-class DataValidator;
+#include "data_validator.h"
 
 class DataValidatorGroup {
 public:
@@ -55,29 +55,21 @@ public:
 	 * @param y		Y Item to put
 	 * @param z		Z Item to put
 	 */
-	bool			put(unsigned index, uint64_t timestamp, float x);
+	void			put(unsigned index, uint64_t timestamp,
+					float val[3], uint64_t error_count);
 
 	/**
 	 * Get the best data triplet of the group
 	 *
-	 * @param x		X Item to put
-	 * @param y		Y Item to put
-	 * @param z		Z Item to put
+	 * @return		pointer to the array of best values
 	 */
-	void			get_best(uint64_t timestamp, int *index, float *x);
-
-	/**
-	 * Get the next sibling in the group
-	 *
-	 * @return		the next sibling
-	 */
-	float			sibling() { return _sibling; }
+	float*			get_best(uint64_t timestamp, int *index);
 
 	/**
 	 * Print the validator value
 	 *
 	 */
-	float			print(bool auto_reset);
+	void			print();
 
 private:
 	DataValidator *_first;		/**< sibling in the group */
@@ -87,7 +79,7 @@ private:
 	DataValidatorGroup operator=(const DataValidatorGroup&);
 };
 
-DataValidatorGroup(unsigned siblings) :
+DataValidatorGroup::DataValidatorGroup(unsigned siblings) :
 	_first(nullptr)
 {
 	DataValidator *next = _first;
@@ -97,20 +89,20 @@ DataValidatorGroup(unsigned siblings) :
 	}
 }
 
-~DataValidatorGroup()
+DataValidatorGroup::~DataValidatorGroup()
 {
 
 }
 
-bool
-DataValidatorGroup::put(unsigned index, uint64_t timestamp, float x)
+void
+DataValidatorGroup::put(unsigned index, uint64_t timestamp, float val[3], uint64_t error_count)
 {
 	DataValidator *next = _first;
 	unsigned i = 0;
 
 	while (next != nullptr) {
 		if (i == index) {
-			next->put(timestamp, x);
+			next->put(timestamp, val, error_count);
 			break;
 		}
 		next = next->sibling();
@@ -118,15 +110,15 @@ DataValidatorGroup::put(unsigned index, uint64_t timestamp, float x)
 	}
 }
 
-bool
-DataValidatorGroup::get_best(uint64_t timestamp, int *index, float *x)
+float*
+DataValidatorGroup::get_best(uint64_t timestamp, int *index)
 {
 	DataValidator *next = _first;
 
 	// XXX This should eventually also include voting
 	float max_confidence = 0.0f;
 	int max_index = -1;
-	float best_value = 0.0f;
+	DataValidator *best = nullptr;
 
 	unsigned i = 0;
 
@@ -135,17 +127,17 @@ DataValidatorGroup::get_best(uint64_t timestamp, int *index, float *x)
 		if (confidence > max_confidence) {
 			max_index = i;
 			max_confidence = confidence;
-			best_value = next->get();
+			best = next;
 		}
 		next = next->sibling();
 		i++;
 	}
 
 	*index = max_index;
-	*x = best_value;
+	return (best) ? best->value() : nullptr;
 }
 
-float
+void
 DataValidatorGroup::print()
 {
 	DataValidator *next = _first;

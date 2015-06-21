@@ -41,11 +41,9 @@
 
 #pragma once
 
-class DataValidator;
-
 class DataValidator {
 public:
-	DataValidator(DataValidator *sibling);
+	DataValidator(DataValidator *prev_sibling = nullptr);
 	virtual ~DataValidator();
 
 	/**
@@ -53,107 +51,125 @@ public:
 	 *
 	 * @param val		Item to put
 	 */
-	void			put(uint64_t timestamp, float val);
+	void			put(uint64_t timestamp, float val[3], uint64_t error_count);
 
 	/**
 	 * Get the next sibling in the group
 	 *
 	 * @return		the next sibling
 	 */
-	float			sibling() { return _sibling; }
+	DataValidator*		sibling() { return _sibling; }
 
 	/**
 	 * Get the confidence of this validator
 	 * @return		the confidence between 0 and 1
 	 */
-	float			confidence();
+	float			confidence(uint64_t timestamp);
 
 	/**
 	 * Get the value of this validator
 	 * @return		the stored value
 	 */
-	float			value() { return _value; }
+	float*			value() { return _value; }
 
 	/**
 	 * Print the validator value
 	 *
 	 */
-	float			print(bool auto_reset);
+	void			print();
 
 private:
+	static const unsigned _dimensions = 3;
 	uint64_t _time_last;			/**< last timestamp */
 	uint64_t _timeout_interval;		/**< interval in which the datastream times out in us */
 	uint64_t _event_count;			/**< total data counter */
-	float _mean;				/**< mean of value */
-	float _lp;				/**< low pass value */
-	float _M2;				/**< RMS component value */
-	float _rms;				/**< root mean square error */
-	float _value;				/**< last value */
+	uint64_t _error_count;			/**< error count */
+	float _mean[_dimensions];				/**< mean of value */
+	float _lp[3];				/**< low pass value */
+	float _M2[3];				/**< RMS component value */
+	float _rms[3];				/**< root mean square error */
+	float _value[3];			/**< last value */
 	DataValidator *_sibling;		/**< sibling in the group */
+	const unsigned _noreturn_errcount = 1000;	/**< if the error count reaches this value, return sensor as invalid */
 
 	/* we don't want this class to be copied */
 	DataValidator(const DataValidator&);
 	DataValidator operator=(const DataValidator&);
 };
 
-DataValidator(sibling = nullptr) :
+DataValidator::DataValidator(DataValidator *prev_sibling) :
 	_time_last(0),
 	_timeout_interval(50000),
 	_event_count(0),
-	_mean(0.0f),
-	_lp(0.0f),
-	_M2(0.0f),
-	_rms(0.0f),
-	_value(0.0f),
-	_sibling(sibling)
+	_error_count(0),
+	_mean{0.0f},
+	_lp{0.0f},
+	_M2{0.0f},
+	_rms{0.0f},
+	_value{0.0f},
+	_sibling(prev_sibling)
 {
 
 }
 
-~DataValidator()
+DataValidator::~DataValidator()
 {
 
 }
 
 void
-DataValidator::put(uint64_t timestamp, float val)
+DataValidator::put(uint64_t timestamp, float val[3], uint64_t error_count)
 {
 	_event_count++;
+	_error_count = error_count;
 
-	if (_time_last == 0) {
-		_mean = val;
-		_lp = val;
-		_M2 = 0;
-	} else {
-		float lp_val = val - _lp;
+	for (unsigned i = 0; i < _dimensions; i++) {
+		if (_time_last == 0) {
+			_mean[i] = val[i];
+			_lp[i] = val[i];
+			_M2[i] = 0;
+		} else {
+			float lp_val = val[i] - _lp[i];
 
-		float delta_val = lp_val - _mean;
-		_mean += delta_val / _event_count;
-		_M2 += delta_val * (lp_val - _mean);
-		_rms = sqrtf(_M2 / (_event_count - 1));
+			float delta_val = lp_val - _mean[i];
+			_mean[i] += delta_val / _event_count;
+			_M2[i] += delta_val * (lp_val - _mean[i]);
+			_rms[i] = sqrtf(_M2[i] / (_event_count - 1));
+		}
+
+		// XXX replace with better filter, make it auto-tune to update rate
+		_lp[i] = _lp[i] * 0.95f + val[i] * 0.05f;
+
+		_value[i] = val[i];
 	}
 
-	// XXX replace with better filter, make it auto-tune to update rate
-	_lp = _lp * 0.95f + val * 0.05f;
-
 	_time_last = timestamp;
-	_value = val;
 }
 
-void
+float
 DataValidator::confidence(uint64_t timestamp)
 {
+	/* check error count limit */
+	if (_error_count > _noreturn_errcount) {
+		return 0.0f;
+	}
+
 	/* timed out - that's it */
 	if (timestamp - _time_last > _timeout_interval) {
 		return 0.0f;
 	}
 
 	// XXX work out scaling between confidence and RMS
-	return _rms / _mean;
+	//return _rms / _mean;
+
+	return 1.0f;
 }
 
-float
+void
 DataValidator::print()
 {
-	printf("\tmean: %8.4f lp: %8.4f RMS: %8.4f\n", _lp + _mean, _lp, _rms);
+	for (unsigned i = 0; i < _dimensions; i++) {
+		printf("\tmean: %8.4f lp: %8.4f RMS: %8.4f\n",
+			(double)(_lp[i] + _mean[i]), (double)_lp[i], (double)_rms[i]);
+	}
 }
