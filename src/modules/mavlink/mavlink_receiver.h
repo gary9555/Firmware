@@ -41,6 +41,8 @@
 
 #pragma once
 
+#include <uORB/topics/test_uorb.h>   ///////////////////////////////////////////
+
 #include <systemlib/perf_counter.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/sensor_combined.h>
@@ -113,6 +115,8 @@ public:
 private:
 	Mavlink	*_mavlink;
 
+    void handle_message_test_uorb(mavlink_message_t *msg);   ////////////////////////////////////////////////
+
 	void handle_message(mavlink_message_t *msg);
 	void handle_message_command_long(mavlink_message_t *msg);
 	void handle_message_command_int(mavlink_message_t *msg);
@@ -153,6 +157,9 @@ private:
 	struct vehicle_local_position_s hil_local_pos;
 	struct vehicle_land_detected_s hil_land_detector;
 	struct vehicle_control_mode_s _control_mode;
+
+    orb_advert_t _test_uorb_pub;    ////////////////////////////////////////////////////////
+
 	orb_advert_t _global_pos_pub;
 	orb_advert_t _local_pos_pub;
 	orb_advert_t _attitude_pub;

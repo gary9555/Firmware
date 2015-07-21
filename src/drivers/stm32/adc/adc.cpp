@@ -66,6 +66,7 @@
 #include <systemlib/perf_counter.h>
 
 #include <uORB/topics/system_power.h>
+#include "uORB/topics/adc_prox.h"
 
 /*
  * Register accessors.
@@ -122,7 +123,10 @@ private:
 	unsigned		_channel_count;
 	adc_msg_s		*_samples;		/**< sample buffer */
 
+
 	orb_advert_t		_to_system_power;
+    orb_advert_t        _adc_prox;
+
 
 	/** work trampoline */
 	static void		_tick_trampoline(void *arg);
@@ -141,6 +145,7 @@ private:
 
 	// update system_power ORB topic, only on FMUv2
 	void update_system_power(void);
+    void update_adc_prox(void);
 };
 
 ADC::ADC(uint32_t channels) :
@@ -148,7 +153,8 @@ ADC::ADC(uint32_t channels) :
 	_sample_perf(perf_alloc(PC_ELAPSED, "adc_samples")),
 	_channel_count(0),
 	_samples(nullptr),
-	_to_system_power(nullptr)
+    _to_system_power(nullptr),
+    _adc_prox(nullptr)
 {
 	_debug_enabled = true;
 
@@ -168,7 +174,7 @@ ADC::ADC(uint32_t channels) :
 		unsigned index = 0;
 		for (unsigned i = 0; i < 32; i++) {
 			if (channels & (1 << i)) {
-				_samples[index].am_channel = i;
+                _samples[index].am_channel = i;
 				_samples[index].am_data = 0;
 				index++;
 			}
@@ -299,7 +305,36 @@ ADC::_tick()
 	for (unsigned i = 0; i < _channel_count; i++)
 		_samples[i].am_data = _sample(_samples[i].am_channel);
 	update_system_power();
+    update_adc_prox();
 }
+
+
+
+void ADC::update_adc_prox(void){
+#ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
+    adc_prox_s adc;
+    adc.timestamp = hrt_absolute_time();
+
+
+    for (unsigned i = 0; i < _channel_count; i++) {
+        if (_samples[i].am_channel == 14) {
+            // it is 2:1 scaled
+            adc.data = _samples[i].am_data*0.256;         //* (6.6f / 4096);
+        }
+    }
+    adc.prox_num=0;
+
+    /* lazily publish */
+    if (_adc_prox != nullptr) {
+        orb_publish(ORB_ID(adc_prox), _adc_prox, &adc);
+    } else {
+        _adc_prox = orb_advertise(ORB_ID(adc_prox), &adc);
+    }
+#endif // CONFIG_ARCH_BOARD_PX4FMU_V2
+}
+
+
+
 
 void
 ADC::update_system_power(void)
@@ -385,18 +420,24 @@ test(void)
 	if (fd < 0)
 		err(1, "can't open ADC device");
 
-	for (unsigned i = 0; i < 50; i++) {
+    for (unsigned i = 0; i < 100; i++) {
 		adc_msg_s data[12];
 		ssize_t count = read(fd, data, sizeof(data));
 
 		if (count < 0)
 			errx(1, "read error");
 
-		unsigned channels = count / sizeof(data[0]);
+        //unsigned channels = count / sizeof(data[0]);
 
-		for (unsigned j = 0; j < channels; j++) {
-			printf ("%d: %u  ", data[j].am_channel, data[j].am_data);
-		}
+        //for (unsigned j = 0; j < channels; j++) {
+        //	printf ("%d: %u  ", data[j].am_channel, data[j].am_data);
+        //}
+        printf ("%d: %u       ", data[6].am_channel, data[6].am_data);
+        printf ("%d: %u       ", data[7].am_channel, data[7].am_data);
+        printf ("%d: %u       ", data[9].am_channel, data[9].am_data);
+
+        printf("%d  cm", data[7].am_data/4);
+
 
 		printf("\n");
 		usleep(500000);

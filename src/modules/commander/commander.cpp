@@ -94,6 +94,7 @@
 #include <uORB/topics/telemetry_status.h>
 #include <uORB/topics/vtol_vehicle_status.h>
 #include <uORB/topics/vehicle_land_detected.h>
+#include "uORB/topics/adc_prox.h"
 
 #include <drivers/drv_led.h>
 #include <drivers/drv_hrt.h>
@@ -196,6 +197,8 @@ static struct safety_s safety;
 static struct vehicle_control_mode_s control_mode;
 static struct offboard_control_mode_s offboard_control_mode;
 static struct home_position_s _home;
+
+static int timecnt=0; // To count the times the adc value has gone below threshold
 
 /**
  * The daemon app only briefly exists to start
@@ -863,7 +866,7 @@ int commander_thread_main(int argc, char *argv[])
 	bool was_armed = false;
 
 	/* set parameters */
-	param_t _param_sys_type = param_find("MAV_TYPE");
+    param_t _param_sys_type = param_find("MAV_TYPE");
 	param_t _param_system_id = param_find("MAV_SYS_ID");
 	param_t _param_component_id = param_find("MAV_COMP_ID");
 	param_t _param_takeoff_alt = param_find("NAV_TAKEOFF_ALT");
@@ -1164,6 +1167,11 @@ int commander_thread_main(int argc, char *argv[])
 	struct vtol_vehicle_status_s vtol_status;
 	memset(&vtol_status, 0, sizeof(vtol_status));
 	vtol_status.vtol_in_rw_mode = true;		//default for vtol is rotary wing
+
+    /* Subscribe to adc_prox topic */
+    int adc_prox_sub=orb_subscribe(ORB_ID(adc_prox));
+    struct adc_prox_s adc_prox;
+    memset(&adc_prox, 0 ,sizeof(adc_prox));
 
 
 	control_status_leds(&status, &armed, true);
@@ -1473,7 +1481,7 @@ int commander_thread_main(int argc, char *argv[])
 		}
 
 		/* update vtol vehicle status*/
-		orb_check(vtol_vehicle_status_sub, &updated);
+        orb_check(vtol_vehicle_status_sub, &updated);
 
 		if (updated) {
 			/* vtol status changed */
@@ -1995,7 +2003,7 @@ int commander_thread_main(int argc, char *argv[])
 			orb_copy(ORB_ID(vehicle_command), cmd_sub, &cmd);
 
 			/* handle it */
-			if (handle_command(&status, &safety, &cmd, &armed, &_home, &global_position, &local_position, &home_pub)) {
+            if (handle_command(&status, &safety, &cmd, &armed, &_home, &global_position, &local_position, &home_pub)) {
 				status_changed = true;
 			}
 		}
@@ -2073,6 +2081,37 @@ int commander_thread_main(int argc, char *argv[])
 		}
 
 		was_armed = armed.armed;
+
+
+
+
+
+
+/******************************************************************/
+
+
+        /* Make sure the drone avoids barriers in auto mode */
+        if(status.main_state==vehicle_status_s::MAIN_STATE_MANUAL){
+            orb_check(adc_prox_sub, &updated);
+            if(updated){
+                orb_copy(ORB_ID(adc_prox), adc_prox_sub, &adc_prox);
+            }
+            if(adc_prox.data<50)
+                timecnt++;
+                if(timecnt>3){
+                    mavlink_log_critical(mavlink_fd, "into the loop ");
+
+                    int shuai=main_state_transition(&status,vehicle_status_s::MAIN_STATE_AUTO_LOITER);
+                    mavlink_log_critical(mavlink_fd, "return value: %d ",shuai);
+
+                    main_state_changed=true;
+                  //  printf("counting %d", timecnt);
+                    timecnt=0;
+                }
+        }
+
+/*******************************************************************/
+
 
 		/* now set navigation state according to failsafe and main state */
 		bool nav_state_changed = set_nav_state(&status, (bool)datalink_loss_enabled,

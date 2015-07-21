@@ -371,6 +371,10 @@ Mission::set_mission_items()
 	bool home_dist_ok = check_dist_1wp();
 	/* the home dist check provides user feedback, so we initialize it to this */
 	bool user_feedback_done = !home_dist_ok;
+    if(!_param_onboard_enabled.get())
+        mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 1");
+    if(!read_mission_item(true, true, &_mission_item))
+        mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 2");
 
 	/* try setting onboard mission item */
 	if (_param_onboard_enabled.get() && read_mission_item(true, true, &_mission_item)) {
@@ -675,7 +679,11 @@ Mission::read_mission_item(bool onboard, bool is_current, struct mission_item_s 
 
 		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
 			/* mission item index out of bounds */
-			return false;
+            char buf[128];
+            sprintf(buf, "mission id: %d mission cnt: %d", *mission_index_ptr, (int)mission->count);
+            mavlink_log_critical(_navigator->get_mavlink_fd(), buf);
+
+            return false;
 		}
 
 		const ssize_t len = sizeof(struct mission_item_s);
