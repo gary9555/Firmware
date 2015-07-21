@@ -68,7 +68,7 @@ then
 	# Start the ORB (first app to start)
 	#
 	uorb start
-
+	
 	#
 	# Load parameters
 	#
@@ -671,7 +671,8 @@ then
 	# Start the navigator
 	#
 	navigator start
-
+	
+	
 	#
 	# Generic setup (autostart ID not found)
 	#

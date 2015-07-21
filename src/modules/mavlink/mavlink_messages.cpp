@@ -43,6 +43,8 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <uORB/topics/test_uorb.h>
+
 #include <commander/px4_custom_mode.h>
 #include <lib/geo/geo.h>
 #include <uORB/uORB.h>

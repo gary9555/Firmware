@@ -200,6 +200,11 @@ private:
 		param_t acro_pitch_max;
 		param_t acro_yaw_max;
 
+        /*
+          TODO: experiment
+        */
+
+
 	}		_params_handles;		/**< handles for interesting parameters */
 
 	struct {

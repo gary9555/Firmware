@@ -56,6 +56,8 @@
 #include <uORB/topics/mission_result.h>
 #include <uORB/topics/geofence_result.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
+#include "uORB/topics/adc_prox.h"
+
 
 #include "navigator_mode.h"
 #include "mission.h"
@@ -203,6 +205,9 @@ private:
 	mission_result_s				_mission_result;
 	geofence_result_s				_geofence_result;
 	vehicle_attitude_setpoint_s			_att_sp;
+    adc_prox_s                      _adc_prox;
+
+
 
 	bool 		_home_position_set;
 

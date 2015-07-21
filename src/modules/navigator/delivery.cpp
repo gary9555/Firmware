@@ -31,22 +31,21 @@
  *
  ****************************************************************************/
 /**
- * @file navigator_mission.cpp
+ * @file mission.h
  *
- * Helper class to access missions
+ * Delivery mode to perform deliveries
  *
- * @author Julian Oes <julian@oes.ch>
- * @author Thomas Gubler <thomasgubler@gmail.com>
- * @author Anton Babushkin <anton.babushkin@me.com>
- * @author Ban Siesta <bansiesta@gmail.com>
- * @author Simon Wilks <simon@uaventure.com>
+ * @author Brian Krentz <brian.krentz@gmail.com>
  */
-
+ 
+#include <px4_posix.h>
 #include <sys/types.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <float.h>
+#include <math.h>
+#include <fcntl.h>
 
 #include <drivers/drv_hrt.h>
 
@@ -58,14 +57,18 @@
 
 #include <uORB/uORB.h>
 #include <uORB/topics/mission.h>
+#include <uORB/topics/home_position.h>
 #include <uORB/topics/mission_result.h>
 
-#include "mission.h"
-#include "navigator.h"
+#include <mavlink/mavlink_log.h>
 
-Mission::Mission(Navigator *navigator, const char *name) :
-	MissionBlock(navigator, name),
-	_param_onboard_enabled(this, "MIS_ONBOARD_EN", false),
+#include "navigator.h"
+#include "delivery.h"
+
+Delivery::Delivery(Navigator *navigator, const char *name) :
+	MissionBlock(Navigator, name),
+	_complete(false),
+	////////////////////////////////
 	_param_takeoff_alt(this, "MIS_TAKEOFF_ALT", false),
 	_param_dist_1wp(this, "MIS_DIST_1WP", false),
 	_param_altmode(this, "MIS_ALTMODE", false),
@@ -83,19 +86,26 @@ Mission::Mission(Navigator *navigator, const char *name) :
 	_min_current_sp_distance_xy(FLT_MAX),
 	_mission_item_previous_alt(NAN),
   	_on_arrival_yaw(NAN),
-	_distance_current_previous(0.0f)
+	_distance_current_previous(0.0f),
+	////////////////////////////////
+	_rtl_state(RTL_STATE_NONE),
+	_param_return_alt(this, "RTL_RETURN_ALT", false),
+	_param_descend_alt(this, "RTL_DESCEND_ALT", false),
+	_param_land_delay(this, "RTL_LAND_DELAY", false)
 {
 	/* load initial params */
 	updateParams();
 }
 
-Mission::~Mission()
+void
+Delivery::~Delivery()
 {
 }
 
 void
-Mission::on_inactive()
+Delivery::on_inactive()
 {
+////////////////////////////////////
 	if (_inited) {
 		/* check if missions have changed so that feedback to ground station is given */
 		bool onboard_updated = false;
@@ -126,7 +136,7 @@ Mission::on_inactive()
 			_navigator->set_mission_result_updated();
 
 			_home_inited = true;
-		}
+	}
 
 	} else {
 		/* read mission topics on initialization */
@@ -140,65 +150,195 @@ Mission::on_inactive()
 	if (!_navigator->get_can_loiter_at_sp() || _navigator->get_vstatus()->condition_landed) {
 		_need_takeoff = true;
 	}
+
+	/* reset RTL state only if setpoint moved */
+	if (!_navigator->get_can_loiter_at_sp()) {
+		_rtl_state = RTL_STATE_NONE;
+	}
 }
 
 void
-Mission::on_activation()
+Delivery::on_activation()
 {
-	set_mission_items();
-}
+	// change delivery_status to initial state
+	// check conditions and acquire needed GPS info
+	set_delivery_items();
 
-void
-Mission::on_active()
-{
-	/* check if anything has changed */
-	bool onboard_updated = false;
-	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);
-	if (onboard_updated) {
-		update_onboard_mission();
-	}
+	/* if lower than return altitude, climb up first */
+	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
+		   + _param_return_alt.get()) {
+		_rtl_state = RTL_STATE_CLIMB;
 
-	bool offboard_updated = false;
-	orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
-	if (offboard_updated) {
-		update_offboard_mission();
-	}
-
-	/* reset mission items if needed */
-	if (onboard_updated || offboard_updated) {
-		set_mission_items();
-	}
-
-	/* lets check if we reached the current mission item */
-	if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
-		set_mission_item_reached();
-		if (_mission_item.autocontinue) {
-			/* switch to next waypoint if 'autocontinue' flag set */
-			advance_mission();
-			set_mission_items();
-
-		}
-
-	} else if (_mission_type != MISSION_TYPE_NONE &&_param_altmode.get() == MISSION_ALTMODE_FOH) {
-		altitude_sp_foh_update();
+	/* otherwise go straight to return */
 	} else {
-		/* if waypoint position reached allow loiter on the setpoint */
-		if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
-			_navigator->set_can_loiter_at_sp(true);
-		}
+		/* set altitude setpoint to current altitude */
+		_rtl_state = RTL_STATE_RETURN;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_global_position()->alt;
 	}
 
-	/* see if we need to update the current yaw heading for rotary wing types */
-	if (_navigator->get_vstatus()->is_rotary_wing 
-			&& _param_yawmode.get() != MISSION_YAWMODE_NONE
-			&& _mission_type != MISSION_TYPE_NONE) {
-		heading_sp_update();
-	}
-
+	set_rtl_item();
 }
 
 void
-Mission::update_onboard_mission()
+Delivery::on_active()
+{
+	//check for delivery_status and run through delivery routine
+	switch(delivery_status){
+		case delivery_status::DELIV_PREFLIGHT:
+			set_delivery_items();
+		case delivery_status::DELIV_ENROUTE:
+			to_destination();
+		case delivery_status::DELIV_DROPOFF:
+			activate_gripper();
+		case delivery_status::DELIV_RETURN:
+			return_home();
+		case delivery_status::DELIV_DISARM:
+			shutoff();
+		case delivery_status::DELIV_COMPLETE:
+			on_inactive();
+		default:
+			on_inactive();
+	}
+}
+
+void
+Delivery::to_destination()
+{
+	// set a mission to destination with takeoff enabled
+	// Status = enroute ; change to Dropoff at completion
+
+	while (!_complete) {
+		/* check if anything has changed */
+		bool offboard_updated = false;
+		orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
+		if (offboard_updated) {
+			update_offboard_mission();
+		}
+
+		/* reset mission items if needed */
+		if (onboard_updated || offboard_updated) {
+			set_mission_items();
+		}
+
+		/* lets check if we reached the current mission item */
+		if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
+			set_mission_item_reached();
+			if (_mission_item.autocontinue) {
+				/* switch to next waypoint if 'autocontinue' flag set */
+				advance_mission();
+				set_mission_items();
+
+			}
+
+		} else if (_mission_type != MISSION_TYPE_NONE &&_param_altmode.get() == MISSION_ALTMODE_FOH) {
+			altitude_sp_foh_update();
+		} else {
+			/* if waypoint position reached allow loiter on the setpoint */
+			if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
+				_navigator->set_can_loiter_at_sp(true);
+				_complete = true;
+			}
+		}
+
+		/* see if we need to update the current yaw heading for rotary wing types */
+		if (_navigator->get_vstatus()->is_rotary_wing 
+				&& _param_yawmode.get() != MISSION_YAWMODE_NONE
+				&& _mission_type != MISSION_TYPE_NONE) {
+			heading_sp_update();
+		}
+	}
+
+	// Reset complete variable for next stage
+	_complete = false;
+
+	// Update status now that travel to destination is complete
+	delivery_status = DELIV_DROPOFF;
+	mavlink_log_critical(mavlink_fd, "Black Hawk at Location");
+}
+
+void
+Delivery::activate_gripper()
+{
+	// activate the gripper script to let down the object and release
+	// status = enroute ; change to return at completion
+
+	// Update status now that dropoff is complete
+	delivery_status = DELIV_RETURN;
+	mavlink_log_critical(mavlink_fd, "The Eagle Has Landed");
+}
+
+void
+Delivery::return_home()
+{
+	// turn on RTL with landing enabled
+	// should halt/switch to loiter if collision_imminent is true
+	// status = return ; change to complete
+
+	while (!_complete) {
+		if (_rtl_state != RTL_STATE_LANDED && is_mission_item_reached()) {
+			advance_rtl();
+			set_rtl_item();
+		}
+
+		if (_rtl_state = RTL_STATE_LANDED) {
+			_complete = true;
+		}
+	}
+
+	// Reset complete variable for next stage
+	_complete = false;
+
+	// Update Status now that return is complete
+	delivery_status = DELIV_DISARM;
+	mavlink_log_critical(mavlink_fd, "Black Hawk Has Nested");
+}
+
+void
+Delivery::shutoff();
+{
+	// Disarm the drone when it is done with the landing
+	// look at commander 380
+	if (_navigator->get_vstatus()->condition_landed) {
+		int mavlink_fd_local = px4_open(MAVLINK_LOG_DEVICE, 0);
+		arm_disarm(false, mavlink_fd_local, "Delivery.cpp");
+		px4_close(mavlink_fd_local);
+	}	
+
+	// Update status now that the copter is disarmed
+	delivery_status = DELIV_COMPLETE;
+	mavlink_log_critical(mavlink_fd, "Black Hawk Sleeping");
+}
+
+void
+Delivery::set_delivery_items()
+{
+	// set the parameters needed for getting to the destination
+	_complete = false;
+}
+
+void
+arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy)
+{
+	transition_result_t arming_res = TRANSITION_NOT_CHANGED;
+
+	// Transition the armed state. By passing mavlink_fd to arming_state_transition it will
+	// output appropriate error messages if the state cannot transition.
+	arming_res = arming_state_transition(&status, &safety, arm ? vehicle_status_s::ARMING_STATE_ARMED : vehicle_status_s::ARMING_STATE_STANDBY, &armed,
+					     true /* fRunPreArmChecks */, mavlink_fd_local);
+
+	if (arming_res == TRANSITION_CHANGED && mavlink_fd) {
+		mavlink_log_info(mavlink_fd_local, "[cmd] %s by %s", arm ? "ARMED" : "DISARMED", armedBy);
+
+	} else if (arming_res == TRANSITION_DENIED) {
+		tune_negative(true);
+	}
+}
+
+///////////////////////////////
+
+void
+Delivery::update_onboard_mission()
 {
 	if (orb_copy(ORB_ID(onboard_mission), _navigator->get_onboard_mission_sub(), &_onboard_mission) == OK) {
 		/* accept the current index set by the onboard mission if it is within bounds */
@@ -229,7 +369,7 @@ Mission::update_onboard_mission()
 }
 
 void
-Mission::update_offboard_mission()
+Delivery::update_offboard_mission()
 {
 	bool failed = true;
 
@@ -279,7 +419,7 @@ Mission::update_offboard_mission()
 
 
 void
-Mission::advance_mission()
+Delivery::advance_mission()
 {
 	if (_takeoff) {
 		_takeoff = false;
@@ -302,7 +442,7 @@ Mission::advance_mission()
 }
 
 int
-Mission::get_absolute_altitude_for_item(struct mission_item_s &mission_item)
+Delivery::get_absolute_altitude_for_item(struct mission_item_s &mission_item)
 {
 	if (_mission_item.altitude_is_relative) {
 		return _mission_item.altitude + _navigator->get_home_position()->alt;
@@ -312,7 +452,7 @@ Mission::get_absolute_altitude_for_item(struct mission_item_s &mission_item)
 }
 
 void
-Mission::set_mission_items()
+Delivery::set_mission_items()
 {
 	/* make sure param is up to date */
 	updateParams();
@@ -331,15 +471,7 @@ Mission::set_mission_items()
 	}
 
 	/* the home dist check provides user feedback, so we initialize it to this */
-<<<<<<< HEAD
 	bool user_feedback_done = false;
-=======
-	bool user_feedback_done = !home_dist_ok;
-    if(!_param_onboard_enabled.get())
-        mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 1");
-    if(!read_mission_item(true, true, &_mission_item))
-        mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 2");
->>>>>>> 0231efd357d81f451884caeaf55d22872c9ff6f1
 
 	/* try setting onboard mission item */
 	if (_param_onboard_enabled.get() && read_mission_item(true, true, &_mission_item)) {
@@ -516,7 +648,7 @@ Mission::set_mission_items()
 }
 
 void
-Mission::heading_sp_update()
+Delivery::heading_sp_update()
 {
 	if (_takeoff) {
 		/* we don't want to be yawing during takeoff */
@@ -569,7 +701,7 @@ Mission::heading_sp_update()
 
 
 void
-Mission::altitude_sp_foh_update()
+Delivery::altitude_sp_foh_update()
 {
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
@@ -621,13 +753,13 @@ Mission::altitude_sp_foh_update()
 }
 
 void
-Mission::altitude_sp_foh_reset()
+Delivery::altitude_sp_foh_reset()
 {
 	_min_current_sp_distance_xy = FLT_MAX;
 }
 
 bool
-Mission::read_mission_item(bool onboard, bool is_current, struct mission_item_s *mission_item)
+Delivery::read_mission_item(bool onboard, bool is_current, struct mission_item_s *mission_item)
 {
 	/* select onboard/offboard mission */
 	int *mission_index_ptr;
@@ -660,11 +792,7 @@ Mission::read_mission_item(bool onboard, bool is_current, struct mission_item_s 
 
 		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
 			/* mission item index out of bounds */
-            char buf[128];
-            sprintf(buf, "mission id: %d mission cnt: %d", *mission_index_ptr, (int)mission->count);
-            mavlink_log_critical(_navigator->get_mavlink_fd(), buf);
-
-            return false;
+			return false;
 		}
 
 		const ssize_t len = sizeof(struct mission_item_s);
@@ -729,7 +857,7 @@ Mission::read_mission_item(bool onboard, bool is_current, struct mission_item_s 
 }
 
 void
-Mission::save_offboard_mission_state()
+Delivery::save_offboard_mission_state()
 {
 	mission_s mission_state;
 
@@ -772,7 +900,7 @@ Mission::save_offboard_mission_state()
 }
 
 void
-Mission::report_do_jump_mission_changed(int index, int do_jumps_remaining)
+Delivery::report_do_jump_mission_changed(int index, int do_jumps_remaining)
 {
 	/* inform about the change */
 	_navigator->get_mission_result()->item_do_jump_changed = true;
@@ -782,7 +910,7 @@ Mission::report_do_jump_mission_changed(int index, int do_jumps_remaining)
 }
 
 void
-Mission::set_mission_item_reached()
+Delivery::set_mission_item_reached()
 {
 	_navigator->get_mission_result()->reached = true;
 	_navigator->get_mission_result()->seq_reached = _current_offboard_mission_index;
@@ -791,7 +919,7 @@ Mission::set_mission_item_reached()
 }
 
 void
-Mission::set_current_offboard_mission_item()
+Delivery::set_current_offboard_mission_item()
 {
 	_navigator->get_mission_result()->reached = false;
 	_navigator->get_mission_result()->finished = false;
@@ -802,8 +930,212 @@ Mission::set_current_offboard_mission_item()
 }
 
 void
-Mission::set_mission_finished()
+Delivery::set_mission_finished()
 {
 	_navigator->get_mission_result()->finished = true;
 	_navigator->set_mission_result_updated();
+}
+
+///////////////////////////////
+
+void
+Delivery::set_rtl_item()
+{
+	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+
+	/* make sure we have the latest params */
+	updateParams();
+
+	set_previous_pos_setpoint();
+	_navigator->set_can_loiter_at_sp(false);
+
+	switch (_rtl_state) {
+	case RTL_STATE_CLIMB: {
+		float climb_alt = _navigator->get_home_position()->alt + _param_return_alt.get();
+
+		_mission_item.lat = _navigator->get_global_position()->lat;
+		_mission_item.lon = _navigator->get_global_position()->lon;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = climb_alt;
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 0.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = true;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: climb to %d m (%d m above home)",
+			(int)(climb_alt),
+			(int)(climb_alt - _navigator->get_home_position()->alt));
+		break;
+	}
+
+	case RTL_STATE_RETURN: {
+		_mission_item.lat = _navigator->get_home_position()->lat;
+		_mission_item.lon = _navigator->get_home_position()->lon;
+		 // don't change altitude
+
+		 if (pos_sp_triplet->previous.valid) {
+		 	/* if previous setpoint is valid then use it to calculate heading to home */
+		 	_mission_item.yaw = get_bearing_to_next_waypoint(
+		 	        pos_sp_triplet->previous.lat, pos_sp_triplet->previous.lon,
+		 	        _mission_item.lat, _mission_item.lon);
+
+		 } else {
+		 	/* else use current position */
+		 	_mission_item.yaw = get_bearing_to_next_waypoint(
+		 	        _navigator->get_global_position()->lat, _navigator->get_global_position()->lon,
+		 	        _mission_item.lat, _mission_item.lon);
+		 }
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 0.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = true;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: return at %d m (%d m above home)",
+			(int)(_mission_item.altitude),
+			(int)(_mission_item.altitude - _navigator->get_home_position()->alt));
+		break;
+	}
+
+	case RTL_STATE_DESCEND: {
+		_mission_item.lat = _navigator->get_home_position()->lat;
+		_mission_item.lon = _navigator->get_home_position()->lon;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_home_position()->alt + _param_descend_alt.get();
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_LOITER_TIME_LIMIT;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 0.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = false;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: descend to %d m (%d m above home)",
+			(int)(_mission_item.altitude),
+			(int)(_mission_item.altitude - _navigator->get_home_position()->alt));
+		break;
+	}
+
+	case RTL_STATE_LOITER: {
+		bool autoland = _param_land_delay.get() > -DELAY_SIGMA;
+
+		_mission_item.lat = _navigator->get_home_position()->lat;
+		_mission_item.lon = _navigator->get_home_position()->lon;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_home_position()->alt + _param_descend_alt.get();
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = autoland ? NAV_CMD_LOITER_TIME_LIMIT : NAV_CMD_LOITER_UNLIMITED;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = _param_land_delay.get() < 0.0f ? 0.0f : _param_land_delay.get();
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = autoland;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		_navigator->set_can_loiter_at_sp(true);
+
+		if (autoland) {
+			mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: loiter %.1fs", (double)_mission_item.time_inside);
+
+		} else {
+			mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: completed, loiter");
+		}
+		break;
+	}
+
+	case RTL_STATE_LAND: {
+		_mission_item.lat = _navigator->get_home_position()->lat;
+		_mission_item.lon = _navigator->get_home_position()->lon;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_home_position()->alt;
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_LAND;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 0.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = true;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: land at home");
+		break;
+	}
+
+	case RTL_STATE_LANDED: {
+		_mission_item.lat = _navigator->get_home_position()->lat;
+		_mission_item.lon = _navigator->get_home_position()->lon;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_home_position()->alt;
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_IDLE;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 0.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = true;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: completed, landed");
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	reset_mission_item_reached();
+
+	/* convert mission item to current position setpoint and make it valid */
+	mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+	pos_sp_triplet->next.valid = false;
+
+	_navigator->set_position_setpoint_triplet_updated();
+}
+
+void
+Delivery::advance_rtl()
+{
+	switch (_rtl_state) {
+	case RTL_STATE_CLIMB:
+		_rtl_state = RTL_STATE_RETURN;
+		break;
+
+	case RTL_STATE_RETURN:
+		_rtl_state = RTL_STATE_DESCEND;
+		break;
+
+	case RTL_STATE_DESCEND:
+		/* only go to land if autoland is enabled */
+		if (_param_land_delay.get() < -DELAY_SIGMA || _param_land_delay.get() > DELAY_SIGMA) {
+			_rtl_state = RTL_STATE_LOITER;
+
+		} else {
+			_rtl_state = RTL_STATE_LAND;
+		}
+		break;
+
+	case RTL_STATE_LOITER:
+		_rtl_state = RTL_STATE_LAND;
+		break;
+
+	case RTL_STATE_LAND:
+		_rtl_state = RTL_STATE_LANDED;
+		break;
+
+	default:
+		break;
+	}
 }

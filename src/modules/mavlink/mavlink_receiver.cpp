@@ -87,6 +87,7 @@ __BEGIN_DECLS
 #include "mavlink_receiver.h"
 #include "mavlink_main.h"
 
+
 __END_DECLS
 
 static const float mg2ms2 = CONSTANTS_ONE_G / 1000.0f;
@@ -97,7 +98,11 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	hil_local_pos{},
 	hil_land_detector{},
 	_control_mode{},
-	_global_pos_pub(nullptr),
+
+
+    _test_uorb_pub(nullptr),/////////////////////////////////////////////////////////////////
+
+    _global_pos_pub(nullptr),
 	_local_pos_pub(nullptr),
 	_attitude_pub(nullptr),
 	_gps_pub(nullptr),
@@ -219,9 +224,13 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 
 	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
 		handle_message_distance_sensor(msg);
-		break;
+    break;
 
-	default:
+    case MAVLINK_MSG_ID_TEST_UORB:
+        handle_message_test_uorb(msg);
+    break;
+
+    default:
 		break;
 	}
 
@@ -271,6 +280,39 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 	   This is used in the '-w' command-line flag. */
 	_mavlink->set_has_received_messages(true);
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void MavlinkReceiver::handle_message_test_uorb(mavlink_message_t *msg)
+{
+    /* ca_trajectory */
+    mavlink_test_uorb_t t;
+    mavlink_msg_test_uorb_decode(msg, &t);
+
+    struct test_uorb_s f;
+    memset(&f, 0, sizeof(f));
+
+    f.timestamp = t.timestamp;
+    f.shuai = t.shuai;
+    //f.time_start_usec = traj.time_start_usec;
+    //f.time_stop_usec = traj.time_stop_usec;
+    //for(int i=0;i<28;i++)
+      //  f.coefficients[i] = traj.coefficients[i];
+
+    if (_test_uorb_pub== 0) {
+        _test_uorb_pub = orb_advertise(ORB_ID(test_uorb), &f);
+    } else {
+        orb_publish(ORB_ID(test_uorb), _test_uorb_pub, &f);
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 void
 MavlinkReceiver::handle_message_command_long(mavlink_message_t *msg)
@@ -1029,11 +1071,11 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 {
 	mavlink_manual_control_t man;
 	mavlink_msg_manual_control_decode(msg, &man);
-
+    printf("getting into handle message");
 	// Check target
-	if (man.target != 0 && man.target != _mavlink->get_system_id()) {
-		return;
-	}
+    if (man.target != 0 && man.target != _mavlink->get_system_id()) {
+        return;
+    }
 
 	if (_mavlink->get_manual_input_mode_generation()) {
 

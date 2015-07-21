@@ -71,6 +71,7 @@
 #include <uORB/topics/mission.h>
 #include <uORB/topics/fence.h>
 #include <uORB/topics/navigation_capabilities.h>
+//#include "uORB/topics/adc_prox.h"
 #include <drivers/drv_baro.h>
 
 #include <systemlib/err.h>
@@ -126,6 +127,7 @@ Navigator::Navigator() :
 	_pos_sp_triplet{},
 	_mission_result{},
 	_att_sp{},
+    _adc_prox{},   //adc topic
 	_home_position_set(false),
 	_mission_item_valid(false),
 	_mission_instance_count(0),

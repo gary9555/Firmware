@@ -183,7 +183,39 @@ MavlinkParametersManager::handle_message(const mavlink_message_t *msg)
 			}
 			break;
 		}
+   /* case MAVLINK_MSG_ID_MANUAL_SETPOINT: {
+        mavlink_manual_setpoint_t manual_setpoint;
+        mavlink_msg_manual_setpoint_decode(msg, &manual_setpoint);
 
+        if (manual_setpoint.target_system == mavlink_system.sysid
+            && ((manual_setpoint.target_component == mavlink_system.compid)
+            || (manual_setpoint.target_component == MAV_COMP_ID_ALL))) {
+
+            //Copy the content of mavlink_manual_setpoint_t cmd_mavlink into command_t cmd
+            vcmd.time_boot_ms = manual_setpoint.time_boot_ms;
+            vcmd.roll = manual_setpoint.roll;
+            vcmd.pitch = manual_setpoint.pitch;
+            vcmd.yaw = manual_setpoint.yaw;
+            vcmd.thrust = manual_setpoint.thrust;
+            vcmd.mode_switch = manual_setpoint.mode_switch;
+            vcmd.manual_override_switch = manual_setpoint.manual_override_switch;
+            vcmd.command = manual_setpoint.command;
+            vcmd.target_system = manual_setpoint.target_system;
+            vcmd.target_component = manual_setpoint.target_component;
+            vcmd.source_system = msg->sysid;
+            vcmd.source_component = msg->compid;
+            vcmd.confirmation =  manual_setpoint.confirmation;
+
+            // check if topic is advertised
+            if (cmd_pub <= 0) {
+                cmd_pub = orb_advertise(ORB_ID(manual_setpoint), &vcmd);
+            }
+            // publish
+            orb_publish(ORB_ID(vehicle_command), cmd_pub, &vcmd);
+        }
+        break;
+    }
+*/
 	default:
 		break;
 	}

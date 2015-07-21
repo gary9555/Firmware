@@ -41,6 +41,17 @@
  * @defgroup topics List of all uORB topics.
  */
 
+
+/* self defined topics*/
+#include "topics/test_uorb.h"
+ORB_DEFINE(test_uorb, struct test_uorb_s);
+
+#include "topics/adc_prox.h"
+ORB_DEFINE(adc_prox, struct adc_prox_s);
+
+
+
+/*originally defined topics*/
 #include <px4_config.h>
 
 #include <drivers/drv_orb_dev.h>
