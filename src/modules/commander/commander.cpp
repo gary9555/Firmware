@@ -196,11 +196,8 @@ static struct vehicle_control_mode_s control_mode;
 static struct offboard_control_mode_s offboard_control_mode;
 static struct home_position_s _home;
 
-<<<<<<< HEAD
 static unsigned _last_mission_instance = 0;
-=======
 static int timecnt=0; // To count the times the adc value has gone below threshold
->>>>>>> 0231efd357d81f451884caeaf55d22872c9ff6f1
 
 /**
  * The daemon app only briefly exists to start
