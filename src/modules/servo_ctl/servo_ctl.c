@@ -56,7 +56,7 @@
 #include <drivers/drv_pwm_output.h>
 #include <modules/px4iofirmware/protocol.h>
 
-struct gpio_servo_s {
+struct servo_ctl_s {
 	struct work_s work;
 	int gpio_fd;
 	bool use_io;
@@ -65,21 +65,21 @@ struct gpio_servo_s {
 	int counter;
 };
 
-static struct gpio_servo_s *gpio_servo_data;
-static bool gpio_servo_started = false;
+static struct servo_ctl_s *servo_ctl_data;
+static bool servo_ctl_started = false;
 
-__EXPORT int gpio_servo_main(int argc, char *argv[]);
+__EXPORT int servo_ctl_main(int argc, char *argv[]);
 
-void gpio_servo_start(FAR void *arg);
+void servo_ctl_start(FAR void *arg);
 
-void gpio_servo_stop(FAR void *arg);
+void servo_ctl_stop(FAR void *arg);
 
-int gpio_servo_main(int argc, char *argv[])
+int servo_ctl_main(int argc, char *argv[])
 {
 	if (argc < 2) {
 
 #ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
-		errx(1, "usage: gpio_servo {start|stop} [-p <n>]\n"
+		errx(1, "usage: servo_ctl {start|stop} [-p <n>]\n"
 		     "\t-p <n>\tUse specified AUX OUT pin number (default: 1)"
 		    );
 #endif
@@ -87,13 +87,13 @@ int gpio_servo_main(int argc, char *argv[])
 	} else {
 
 		if (!strcmp(argv[1], "start")) {
-			if (gpio_servo_started) {
+			if (servo_ctl_started) {
 				errx(1, "already running");
 			}
 
 			bool use_io = false;
 
-			/* by default use GPIO_EXT_1 on FMUv1 and GPIO_SERVO_1 on FMUv2 */
+			/* by default use GPIO_EXT_1 on FMUv1 and servo_ctl_1 on FMUv2 */
 			int pin = 1;
 
 			/* pin name to display */
@@ -121,24 +121,24 @@ int gpio_servo_main(int argc, char *argv[])
 				}
 			}
 
-			gpio_servo_data = malloc(sizeof(struct gpio_servo_s));
-			memset(gpio_servo_data, 0, sizeof(struct gpio_servo_s));
-			gpio_servo_data->use_io = use_io;
-			gpio_servo_data->pin = pin;
-			int ret = work_queue(LPWORK, &(gpio_servo_data->work), gpio_servo_start, gpio_servo_data, 0);
+			servo_ctl_data = malloc(sizeof(struct servo_ctl_s));
+			memset(servo_ctl_data, 0, sizeof(struct servo_ctl_s));
+			servo_ctl_data->use_io = use_io;
+			servo_ctl_data->pin = pin;
+			int ret = work_queue(LPWORK, &(servo_ctl_data->work), servo_ctl_start, servo_ctl_data, 0);
 
 			if (ret != 0) {
 				errx(1, "failed to queue work: %d", ret);
 
 			} else {
-				gpio_servo_started = true;
+				servo_ctl_started = true;
 				warnx("start, using pin: %s", pin_name);
 				exit(0);
 			}
 
 		} else if (!strcmp(argv[1], "stop")) {
-			if (gpio_servo_started) {
-				gpio_servo_started = false;
+			if (servo_ctl_started) {
+				servo_ctl_started = false;
 				warnx("stop");
 				exit(0);
 
@@ -152,10 +152,10 @@ int gpio_servo_main(int argc, char *argv[])
 	}
 }
 
-//takes a pointer to another gpio_servo_s struct
-void gpio_servo_start(FAR void *arg)
+//takes a pointer to another servo_ctl_s struct
+void servo_ctl_start(FAR void *arg)
 {
-	FAR struct gpio_servo_s *priv = (FAR struct gpio_servo_s *)arg;
+	FAR struct servo_ctl_s *priv = (FAR struct servo_ctl_s *)arg;
 
 	char *gpio_dev;
 
@@ -167,8 +167,8 @@ void gpio_servo_start(FAR void *arg)
 
 	if (priv->gpio_fd < 0) {
 		// TODO find way to print errors
-		//printf("gpio_servo: GPIO device \"%s\" open fail\n", gpio_dev);
-		gpio_servo_started = false;
+		//printf("servo_ctl: GPIO device \"%s\" open fail\n", gpio_dev);
+		servo_ctl_started = false;
 		return;
 	}
 
@@ -193,14 +193,14 @@ void gpio_servo_start(FAR void *arg)
 
 	if (ret != 0) {
 		// TODO find way to print errors
-		//printf("gpio_servo: failed to queue work: %d\n", ret);
-		gpio_servo_started = false;
+		//printf("servo_ctl: failed to queue work: %d\n", ret);
+		servo_ctl_started = false;
 		return;
 	}
 }
 
-void gpio_servo_stop(FAR void *arg)
+void servo_ctl_stop(FAR void *arg)
 {
-	FAR struct gpio_servo_s *priv = (FAR struct gpio_servo_s *)arg;
+	FAR struct servo_ctl_s *priv = (FAR struct servo_ctl_s *)arg;
 	ioctl(priv->gpio_fd, GPIO_CLEAR, priv->pin);
 }

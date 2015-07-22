@@ -59,7 +59,7 @@
 #include <drivers/drv_pwm_output.h>
 #include <modules/px4iofirmware/protocol.h>
 
-struct gpio_servo_s {
+struct servo_ctl_s {
 	struct work_s work;
 	int gpio_fd;
 	bool use_io;
@@ -68,11 +68,11 @@ struct gpio_servo_s {
 	int counter;
 };
 
-static struct gpio_servo_s *gpio_servo_data;
-static bool gpio_servo_started;
+static struct servo_ctl_s *servo_ctl_data;
+static bool servo_ctl_started;
 
-_EXPORT int gpio_servo_main(int argc, char *argv[]);
+_EXPORT int servo_ctl_main(int argc, char *argv[]);
 
-_EXPORT void gpio_servo_start(FAR void *arg);
+_EXPORT void servo_ctl_start(FAR void *arg);
 
-_EXPORT void gpio_servo_stop(FAR void *arg);
+_EXPORT void servo_ctl_stop(FAR void *arg);
