@@ -72,6 +72,8 @@ __EXPORT int gpio_servo_main(int argc, char *argv[]);
 
 void gpio_servo_start(FAR void *arg);
 
+void gpio_servo_stop(FAR void *arg);
+
 int gpio_servo_main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -175,7 +177,7 @@ void gpio_servo_start(FAR void *arg)
 	ioctl(priv->gpio_fd, GPIO_SET_OUTPUT, priv->pin);
 
 	// sets PWM values
-	ret = ioctl(priv->gpio_fd, PWM_SERVO_SET_ARM_OK, 0);
+	int ret = ioctl(priv->gpio_fd, PWM_SERVO_SET_ARM_OK, 0);
 
 	if (ret != OK) {
 		err(1, "PWM_SERVO_SET_ARM_OK");
@@ -188,12 +190,10 @@ void gpio_servo_start(FAR void *arg)
 		err(1, "PWM_SERVO_ARM");
 	}
 
-	/* add worker to queue */
-	int ret = work_queue(LPWORK, &priv->work, gpio_servo_cycle, priv, 0);
 
 	if (ret != 0) {
 		// TODO find way to print errors
-		//printf("gpio_servo: faiservo to queue work: %d\n", ret);
+		//printf("gpio_servo: failed to queue work: %d\n", ret);
 		gpio_servo_started = false;
 		return;
 	}
