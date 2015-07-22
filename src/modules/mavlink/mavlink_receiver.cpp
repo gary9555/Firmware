@@ -123,7 +123,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_rates_sp_pub(nullptr),
 	_force_sp_pub(nullptr),
 	_pos_sp_triplet_pub(nullptr),
-	_vicon_position_pub(nullptr),
+	_att_pos_mocap_pub(nullptr),
 	_vision_position_pub(nullptr),
 	_telemetry_status_pub(nullptr),
 	_rc_pub(nullptr),
@@ -174,8 +174,8 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 		handle_message_set_mode(msg);
 		break;
 
-	case MAVLINK_MSG_ID_VICON_POSITION_ESTIMATE:
-		handle_message_vicon_position_estimate(msg);
+	case MAVLINK_MSG_ID_ATT_POS_MOCAP:
+		handle_message_att_pos_mocap(msg);
 		break;
 
 	case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:
@@ -200,6 +200,10 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 
 	case MAVLINK_MSG_ID_MANUAL_CONTROL:
 		handle_message_manual_control(msg);
+		break;
+
+	case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
+		handle_message_rc_channels_override(msg);
 		break;
 
 	case MAVLINK_MSG_ID_HEARTBEAT:
@@ -598,27 +602,34 @@ MavlinkReceiver::handle_message_distance_sensor(mavlink_message_t *msg)
 }
 
 void
-MavlinkReceiver::handle_message_vicon_position_estimate(mavlink_message_t *msg)
+MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 {
-	mavlink_vicon_position_estimate_t pos;
-	mavlink_msg_vicon_position_estimate_decode(msg, &pos);
+	mavlink_att_pos_mocap_t mocap;
+	mavlink_msg_att_pos_mocap_decode(msg, &mocap);
 
-	struct vehicle_vicon_position_s vicon_position;
-	memset(&vicon_position, 0, sizeof(vicon_position));
+	struct att_pos_mocap_s att_pos_mocap;
+	memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
 
-	vicon_position.timestamp = hrt_absolute_time();
-	vicon_position.x = pos.x;
-	vicon_position.y = pos.y;
-	vicon_position.z = pos.z;
-	vicon_position.roll = pos.roll;
-	vicon_position.pitch = pos.pitch;
-	vicon_position.yaw = pos.yaw;
+	// Use the component ID to identify the mocap system
+	att_pos_mocap.id = msg->compid;
 
-	if (_vicon_position_pub == nullptr) {
-		_vicon_position_pub = orb_advertise(ORB_ID(vehicle_vicon_position), &vicon_position);
+	att_pos_mocap.timestamp_boot = hrt_absolute_time(); // Monotonic time
+	att_pos_mocap.timestamp_computer = sync_stamp(mocap.time_usec); // Synced time
+
+	att_pos_mocap.q[0] = mocap.q[0];
+	att_pos_mocap.q[1] = mocap.q[1];
+	att_pos_mocap.q[2] = mocap.q[2];
+	att_pos_mocap.q[3] = mocap.q[3];
+
+	att_pos_mocap.x = mocap.x;
+	att_pos_mocap.y = mocap.y;
+	att_pos_mocap.z = mocap.z;
+
+	if (_att_pos_mocap_pub == nullptr) {
+		_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
 
 	} else {
-		orb_publish(ORB_ID(vehicle_vicon_position), _vicon_position_pub, &vicon_position);
+		orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
 	}
 }
 
@@ -1010,6 +1021,48 @@ static int decode_switch_pos_n(uint16_t buttons, int sw) {
 		return 1;
 	} else {
 		return 0;
+	}
+}
+
+void
+MavlinkReceiver::handle_message_rc_channels_override(mavlink_message_t *msg)
+{
+	mavlink_rc_channels_override_t man;
+	mavlink_msg_rc_channels_override_decode(msg, &man);
+
+	// Check target
+	if (man.target_system != 0 && man.target_system != _mavlink->get_system_id()) {
+		return;
+	}
+
+	struct rc_input_values rc = {};
+	rc.timestamp_publication = hrt_absolute_time();
+	rc.timestamp_last_signal = rc.timestamp_publication;
+
+	rc.channel_count = 8;
+	rc.rc_failsafe = false;
+	rc.rc_lost = false;
+	rc.rc_lost_frame_count = 0;
+	rc.rc_total_frame_count = 1;
+	rc.rc_ppm_frame_length = 0;
+	rc.input_source = RC_INPUT_SOURCE_MAVLINK;
+	rc.rssi = RC_INPUT_RSSI_MAX;
+
+	/* channels */
+	rc.values[0] = man.chan1_raw;
+	rc.values[1] = man.chan2_raw;
+	rc.values[2] = man.chan3_raw;
+	rc.values[3] = man.chan4_raw;
+	rc.values[4] = man.chan5_raw;
+	rc.values[5] = man.chan6_raw;
+	rc.values[6] = man.chan7_raw;
+	rc.values[7] = man.chan8_raw;
+
+	if (_rc_pub == nullptr) {
+		_rc_pub = orb_advertise(ORB_ID(input_rc), &rc);
+
+	} else {
+		orb_publish(ORB_ID(input_rc), _rc_pub, &rc);
 	}
 }
 

@@ -69,11 +69,10 @@ static void run_cmd(const vector<string> &appargs) {
 		arg[i] = (char *)0;
 		cout << "Running: " << command << "\n";
 		apps[command](i,(char **)arg);
-		// XXX hack to prevent shell returning too fast
-		usleep(250000);
-	}
-	else
-	{
+		usleep(40000);
+		cout << "Returning: " << command << "\n";
+
+	} else {
 		cout << "Invalid command: " << command << endl;
 		list_builtins();
 	}

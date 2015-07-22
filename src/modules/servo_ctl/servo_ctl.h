@@ -1,6 +1,7 @@
 /****************************************************************************
  *
- * Copyright (C) 2015 Mark Charlebois. All rights reserved.
+ *   Copyright (c) 2013 PX4 Development Team. All rights reserved.
+ *   Author: Anton Babushkin <anton.babushkin@me.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,35 +32,47 @@
  *
  ****************************************************************************/
 
-#include <px4_log.h>
-#include <semaphore.h>
-#include <px4_workqueue.h>
+/**
+ * @file servo_ctl.h
+ *
+ * gripper servo via GPIO driver.
+ *
+ * @author Vinh Nguyen
+ */
 
-#pragma once
+#ifndef SERVO_CTL_H
+#define SERVO_CTL_H
 
-__BEGIN_DECLS
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <nuttx/wqueue.h>
+#include <nuttx/clock.h>
+#include <systemlib/systemlib.h>
+#include <systemlib/err.h>
+#include <uORB/uORB.h>
+#include <uORB/topics/vehicle_status.h>
+#include <poll.h>
+#include <drivers/drv_gpio.h>
+#include <drivers/drv_pwm_output.h>
+#include <modules/px4iofirmware/protocol.h>
 
-extern sem_t _hrt_work_lock;
-extern struct wqueue_s g_hrt_work;
+struct servo_ctl_s {
+	struct work_s work;
+	int gpio_fd;
+	bool use_io;
+	int pin;
+	bool servo_state;
+	int counter;
+};
 
-void hrt_work_queue_init(void);
-int hrt_work_queue(struct work_s *work, worker_t worker, void *arg, uint32_t delay);
-void hrt_work_cancel(struct work_s *work);
+static struct servo_ctl_s *servo_ctl_data;
+static bool servo_ctl_started;
 
-inline void hrt_work_lock(void);
-inline void hrt_work_unlock(void);
+_EXPORT int servo_ctl_main(int argc, char *argv[]);
 
-inline void hrt_work_lock()
-{
-	//PX4_INFO("hrt_work_lock");
-	sem_wait(&_hrt_work_lock);
-}
+_EXPORT void servo_ctl_start(FAR void *arg);
 
-inline void hrt_work_unlock()
-{
-	//PX4_INFO("hrt_work_unlock");
-	sem_post(&_hrt_work_lock);
-}
-
-__END_DECLS
-
+_EXPORT void servo_ctl_stop(FAR void *arg);

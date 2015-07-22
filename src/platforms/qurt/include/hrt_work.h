@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012-2014 PX4 Development Team. All rights reserved.
+ * Copyright (C) 2015 Mark Charlebois. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,45 +31,35 @@
  *
  ****************************************************************************/
 
-/**
- * @file mission_result.h
- * Mission results that navigator needs to pass on to commander and mavlink.
- *
- * @author Thomas Gubler <thomasgubler@student.ethz.ch>
- * @author Julian Oes <joes@student.ethz.ch>
- * @author Lorenz Meier <lm@inf.ethz.ch>
- * @author Ban Siesta <bansiesta@gmail.com>
- */
+#include <px4_log.h>
+#include <semaphore.h>
+#include <px4_workqueue.h>
 
-#ifndef TOPIC_MISSION_RESULT_H
-#define TOPIC_MISSION_RESULT_H
+#pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "../uORB.h"
+__BEGIN_DECLS
 
-/**
- * @addtogroup topics
- * @{
- */
+extern sem_t _hrt_work_lock;
+extern struct wqueue_s g_hrt_work;
 
-struct mission_result_s {
-	unsigned seq_reached;		/**< Sequence of the mission item which has been reached */
-	unsigned seq_current;		/**< Sequence of the current mission item				 */
-	bool reached;			/**< true if mission has been reached					 */
-	bool finished;			/**< true if mission has been completed					 */
-	bool stay_in_failsafe;		/**< true if the commander should not switch out of the failsafe mode*/
-	bool flight_termination;	/**< true if the navigator demands a flight termination from the commander app */
-	bool item_do_jump_changed;	/**< true if the number of do jumps remaining has changed */
-	unsigned item_changed_index;	/**< indicate which item has changed */
-	unsigned item_do_jump_remaining;/**< set to the number of do jumps remaining for that item */
-};
+void hrt_work_queue_init(void);
+int hrt_work_queue(struct work_s *work, worker_t worker, void *arg, uint32_t usdelay);
+void hrt_work_cancel(struct work_s *work);
 
-/**
- * @}
- */
+static inline void hrt_work_lock(void);
+static inline void hrt_work_unlock(void);
 
-/* register this as object request broker structure */
-ORB_DECLARE(mission_result);
+static inline void hrt_work_lock()
+{
+	//PX4_INFO("hrt_work_lock");
+	sem_wait(&_hrt_work_lock);
+}
 
-#endif
+static inline void hrt_work_unlock()
+{
+	//PX4_INFO("hrt_work_unlock");
+	sem_post(&_hrt_work_lock);
+}
+
+__END_DECLS
+

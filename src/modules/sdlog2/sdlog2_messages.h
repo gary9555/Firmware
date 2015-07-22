@@ -218,7 +218,6 @@ struct log_ARSP_s {
 /* --- FLOW - OPTICAL FLOW --- */
 #define LOG_FLOW_MSG 15
 struct log_FLOW_s {
-	uint64_t timestamp;
 	uint8_t sensor_id;
 	float pixel_flow_x_integral;
 	float pixel_flow_y_integral;
@@ -321,15 +320,16 @@ struct log_PWR_s {
 	uint8_t high_power_rail_overcurrent;
 };
 
-/* --- VICN - VICON POSITION --- */
-#define LOG_VICN_MSG 25
-struct log_VICN_s {
+/* --- MOCP - MOCAP ATTITUDE AND POSITION --- */
+#define LOG_MOCP_MSG 25
+struct log_MOCP_s {
+	float qw;
+	float qx;
+	float qy;
+	float qz;
 	float x;
 	float y;
 	float z;
-	float roll;
-	float pitch;
-	float yaw;
 };
 
 /* --- GS0A - GPS SNR #0, SAT GROUP A --- */
@@ -439,10 +439,10 @@ struct log_VISN_s {
 	float vx;
 	float vy;
 	float vz;
+	float qw;
 	float qx;
 	float qy;
 	float qz;
-	float qw;
 };
 
 /* --- ENCODERS - ENCODER DATA --- */
@@ -521,7 +521,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(OUT0, "ffffffff",		"Out0,Out1,Out2,Out3,Out4,Out5,Out6,Out7"),
 	LOG_FORMAT(AIRS, "fff",			"IndSpeed,TrueSpeed,AirTemp"),
 	LOG_FORMAT(ARSP, "fff",			"RollRateSP,PitchRateSP,YawRateSP"),
-	LOG_FORMAT(FLOW, "QBffffffLLHhB",	"IntT,ID,RawX,RawY,RX,RY,RZ,Dist,TSpan,DtSonar,FrmCnt,GT,Qlty"),
+	LOG_FORMAT(FLOW, "BffffffLLHhB",	"ID,RawX,RawY,RX,RY,RZ,Dist,TSpan,DtSonar,FrmCnt,GT,Qlty"),
 	LOG_FORMAT(GPOS, "LLfffffff",		"Lat,Lon,Alt,VelN,VelE,VelD,EPH,EPV,TALT"),
 	LOG_FORMAT(GPSP, "BLLffBfbf",		"NavState,Lat,Lon,Alt,Yaw,Type,LoitR,LoitDir,PitMin"),
 	LOG_FORMAT(ESC, "HBBBHHffiffH",		"count,nESC,Conn,N,Ver,Adr,Volt,Amp,RPM,Temp,SetP,SetPRAW"),
@@ -537,8 +537,8 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(EST2, "ffffffffffff",    "P0,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11"),
 	LOG_FORMAT(EST3, "ffffffffffffffff",    "P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P25,P26,P27"),
 	LOG_FORMAT(PWR, "fffBBBBB",		"Periph5V,Servo5V,RSSI,UsbOk,BrickOk,ServoOk,PeriphOC,HipwrOC"),
-	LOG_FORMAT(VICN, "ffffff",		"X,Y,Z,Roll,Pitch,Yaw"),
-	LOG_FORMAT(VISN, "ffffffffff",		"X,Y,Z,VX,VY,VZ,QuatX,QuatY,QuatZ,QuatW"),
+	LOG_FORMAT(MOCP, "fffffff",		"QuatW,QuatX,QuatY,QuatZ,X,Y,Z"),
+	LOG_FORMAT(VISN, "ffffffffff",		"X,Y,Z,VX,VY,VZ,QuatW,QuatX,QuatY,QuatZ"),
 	LOG_FORMAT(GS0A, "BBBBBBBBBBBBBBBB",	"s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15"),
 	LOG_FORMAT(GS0B, "BBBBBBBBBBBBBBBB",	"s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15"),
 	LOG_FORMAT(GS1A, "BBBBBBBBBBBBBBBB",	"s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15"),
