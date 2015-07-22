@@ -2096,20 +2096,24 @@ int commander_thread_main(int argc, char *argv[])
             if(updated){
                 orb_copy(ORB_ID(adc_prox), adc_prox_sub, &adc_prox);
             }
-            if(adc_prox.data<50)
+            int data=adc_prox.data;
+            if(data<100)
                 timecnt++;
-                if(timecnt>3){
-                    mavlink_log_critical(mavlink_fd, "into the loop ");
+            else
+                timecnt=0;
+            if(timecnt>3){
+                mavlink_log_critical(mavlink_fd, "into the loop ");
 
-                    int shuai=main_state_transition(&status,vehicle_status_s::MAIN_STATE_AUTO_LOITER);
-                    mavlink_log_critical(mavlink_fd, "return value: %d ",shuai);
-
+                int shuai=main_state_transition(&status,vehicle_status_s::MAIN_STATE_ALTCTL);
+                mavlink_log_critical(mavlink_fd, "Distance: %d   return value: %d ",data,shuai);
+                if(shuai!=-1)
                     main_state_changed=true;
-                  //  printf("counting %d", timecnt);
-                    timecnt=0;
-                }
-        }
+              //  printf("counting %d", timecnt);
+               // timecnt=0;
+            }
 
+
+        }
 /*******************************************************************/
 
 
