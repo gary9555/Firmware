@@ -74,7 +74,6 @@ struct manual_control_setpoint_s {
 	uint8_t return_switch;
 	uint8_t posctl_switch;
 	uint8_t loiter_switch;
-	uint8_t atol_switch; /* Automicatic Take-Off Landing switch */
 	uint8_t acro_switch;
 	uint8_t offboard_switch;
 #ifdef __cplusplus
