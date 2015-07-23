@@ -332,10 +332,10 @@ ToneAlarm::ToneAlarm() :
 	_default_tunes[TONE_NOTIFY_POSITIVE_TUNE] = "MFT200e8a8a";					// Notify Positive tone
 	_default_tunes[TONE_NOTIFY_NEUTRAL_TUNE] = "MFT200e8e";						// Notify Neutral tone
 	_default_tunes[TONE_NOTIFY_NEGATIVE_TUNE] = "MFT200e8c8e8c8e8c8";				// Notify Negative tone
-	_default_tunes[TONE_ARMING_WARNING_TUNE] = "MFT208 L16 01e-ce-g02ce-dc01bgb02dgfe-de-ce-g03ce-dcdc02bagfe-de-ce-g03ce-dc02bgb03dgfe-de-ce-
-    									g04ce-dcdc03bagfe-de-c02ge-c04c03ge-a-01fa02cfa-03ce-d02b-fd01b-03b-fdg01e-gb-02e-gb-03dc02ag#
-    									a03c02aga03e-c02ga03e-c02ga03dc02f#a03ac02f#a03f#c02da03c02af#dg00gb-01dgb-agf#df#a02dc01b-ab-
-    									gb-02dgb-agagf#edc01b-ab-gb-02dgb-agf#df#a03dc02b-ab-gb-03dgb-agagf#edc02b-ag";	//arming warning
+	_default_tunes[TONE_ARMING_WARNING_TUNE] = "MFT200 L16 01e-ce-g02ce-dc 01bgb02dgfe-de-ce-g 03ce-dcdc02bagfe-de-ce-g 03ce-dc02bgb03dgfe-de-ce-\
+    			g04ce-dcdc03bagfe-de-c 02ge-c04c03ge-a-01fa 02cfa-03ce-d02b-fd01b- 03b-fdg01e-gb-02e-gb- 03dc02ag#a03c02aga 03e-c02ga03e-c02ga03dc\
+    			02f#a03ac02f#a03f#c02da 03c02af#dg00gb- 01dgb-agf#df#a02dc01b-ab-gb- 02dgb-agagf#edc01b-ab-gb- 02dgb-agf#df#a03dc 02b-ab-gb-03\
+    			dgb-agagf#edc02b-ag";	//arming warning
 	_default_tunes[TONE_BATTERY_WARNING_SLOW_TUNE] = "MBNT100a8";					//battery warning slow
 	_default_tunes[TONE_BATTERY_WARNING_FAST_TUNE] = "MBNT255a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8";	//battery warning fast
 	_default_tunes[TONE_GPS_WARNING_TUNE] = "MFT255L4AAAL1F#";					//gps warning slow
