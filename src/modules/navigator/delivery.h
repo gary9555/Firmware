@@ -132,6 +132,11 @@ private:
 	*/
 	void advance_delivery_();
 
+	/**
+	*	Activates the servo
+	*/
+	void unload_package();
+
 	bool _complete;
 	float _drop_alt;
 

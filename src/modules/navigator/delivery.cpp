@@ -163,7 +163,7 @@ Delivery::on_activation()
 {
 	// change delivery_status to initial state
 	// check conditions and acquire needed GPS info
-	set_delivery_items();
+	delivery_status = DELIV_PREFLIGHT;
 
 	_rtl_state = RTL_STATE_CLIMB;
 }
@@ -175,6 +175,7 @@ Delivery::on_active()
 	switch(delivery_status){
 		case delivery_status::DELIV_PREFLIGHT:
 			set_delivery_items();
+			advance_delivery();
 			break;
 		case delivery_status::DELIV_ENROUTE:
 			to_destination();
@@ -243,9 +244,6 @@ Delivery::to_destination()
 		}
 	}
 
-	// Reset complete variable for next stage
-	_complete = false;
-
 	// Update status now that travel to destination is complete
 	advance_delivery();
 	mavlink_log_critical(mavlink_fd, "Black Hawk at Location");
@@ -271,6 +269,7 @@ Delivery::activate_gripper()
 	_mission_item.lat = _navigator->get_global_position()->lat;
 	_mission_item.lon = _navigator->get_global_position()->lon;
 	_mission_item.altitude_is_relative = false;
+	// .altitude needs to be referenced to location altitude, not home altitude
 	_mission_item.altitude = _navigator->get_home_position()->alt + _drop_alt;
 	_mission_item.yaw = NAN;
 	_mission_item.loiter_radius = _navigator->get_loiter_radius();
@@ -292,6 +291,7 @@ Delivery::activate_gripper()
 	}
 
 	//Drop the item by activating the servo
+	unload_package();
 
 	reset_mission_item_reached();
 
@@ -348,6 +348,8 @@ Delivery::return_home()
 void
 Delivery::shutoff();
 {
+	set_delivery_items();
+
 	// Disarm the drone when it is done with the landing
 	// look at commander 380
 	if (_navigator->get_vstatus()->condition_landed) {
@@ -408,6 +410,12 @@ Delivery::advance_delivery()
 	default:
 		break;
 	}
+}
+
+void
+Delivery::unload_package()
+{
+	// TODO
 }
 
 ///////////////////////////////
