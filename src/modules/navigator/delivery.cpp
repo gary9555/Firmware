@@ -68,6 +68,7 @@
 Delivery::Delivery(Navigator *navigator, const char *name) :
 	MissionBlock(Navigator, name),
 	_complete(false),
+	_drop_alt(5.0),
 	////////////////////////////////
 	_param_takeoff_alt(this, "MIS_TAKEOFF_ALT", false),
 	_param_dist_1wp(this, "MIS_DIST_1WP", false),
@@ -164,20 +165,7 @@ Delivery::on_activation()
 	// check conditions and acquire needed GPS info
 	set_delivery_items();
 
-	/* if lower than return altitude, climb up first */
-	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
-		   + _param_return_alt.get()) {
-		_rtl_state = RTL_STATE_CLIMB;
-
-	/* otherwise go straight to return */
-	} else {
-		/* set altitude setpoint to current altitude */
-		_rtl_state = RTL_STATE_RETURN;
-		_mission_item.altitude_is_relative = false;
-		_mission_item.altitude = _navigator->get_global_position()->alt;
-	}
-
-	set_rtl_item();
+	_rtl_state = RTL_STATE_CLIMB;
 }
 
 void
@@ -187,18 +175,22 @@ Delivery::on_active()
 	switch(delivery_status){
 		case delivery_status::DELIV_PREFLIGHT:
 			set_delivery_items();
+			break;
 		case delivery_status::DELIV_ENROUTE:
 			to_destination();
+			break;
 		case delivery_status::DELIV_DROPOFF:
 			activate_gripper();
+			break;
 		case delivery_status::DELIV_RETURN:
 			return_home();
+			break;
 		case delivery_status::DELIV_DISARM:
 			shutoff();
+			break;
 		case delivery_status::DELIV_COMPLETE:
-			on_inactive();
 		default:
-			on_inactive();
+			break;
 	}
 }
 
@@ -207,6 +199,8 @@ Delivery::to_destination()
 {
 	// set a mission to destination with takeoff enabled
 	// Status = enroute ; change to Dropoff at completion
+
+	set_delivery_items();
 
 	while (!_complete) {
 		/* check if anything has changed */
@@ -253,7 +247,7 @@ Delivery::to_destination()
 	_complete = false;
 
 	// Update status now that travel to destination is complete
-	delivery_status = DELIV_DROPOFF;
+	advance_delivery();
 	mavlink_log_critical(mavlink_fd, "Black Hawk at Location");
 }
 
@@ -263,8 +257,52 @@ Delivery::activate_gripper()
 	// activate the gripper script to let down the object and release
 	// status = enroute ; change to return at completion
 
+	set_delivery_items();
+
+	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+
+	/* make sure we have the latest params */
+	updateParams();
+
+	set_previous_pos_setpoint();
+	_navigator->set_can_loiter_at_sp(false);
+
+	// mission_item to descend to _drop_alt
+	_mission_item.lat = _navigator->get_global_position()->lat;
+	_mission_item.lon = _navigator->get_global_position()->lon;
+	_mission_item.altitude_is_relative = false;
+	_mission_item.altitude = _navigator->get_home_position()->alt + _drop_alt;
+	_mission_item.yaw = NAN;
+	_mission_item.loiter_radius = _navigator->get_loiter_radius();
+	_mission_item.loiter_direction = 1;
+	_mission_item.nav_cmd = NAV_CMD_LOITER_UNLIMITED;
+	_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+	_mission_item.time_inside = 10.0f;
+	_mission_item.pitch_min = 0.0f;
+	_mission_item.autocontinue = false;
+	_mission_item.origin = ORIGIN_ONBOARD;
+
+	// loiter at destination
+	_navigator->set_can_loiter_at_sp(true);
+	
+	// keep descending until _drop alt reached
+	while (!_complete) {	
+		// when mission is finished then escape loop
+		_complete = is_mission_item_reached();
+	}
+
+	//Drop the item by activating the servo
+
+	reset_mission_item_reached();
+
+	/* convert mission item to current position setpoint and make it valid */
+	mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+	pos_sp_triplet->next.valid = false;
+
+	_navigator->set_position_setpoint_triplet_updated();
+
 	// Update status now that dropoff is complete
-	delivery_status = DELIV_RETURN;
+	advance_delivery();
 	mavlink_log_critical(mavlink_fd, "The Eagle Has Landed");
 }
 
@@ -274,6 +312,22 @@ Delivery::return_home()
 	// turn on RTL with landing enabled
 	// should halt/switch to loiter if collision_imminent is true
 	// status = return ; change to complete
+
+	set_delivery_items();
+
+	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
+			   + _param_return_alt.get()) {
+		_rtl_state = RTL_STATE_CLIMB;
+
+		/* otherwise go straight to return */
+	} else {
+		/* set altitude setpoint to current altitude */
+		_rtl_state = RTL_STATE_RETURN;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_global_position()->alt;
+	}
+
+	set_rtl_item();
 
 	while (!_complete) {
 		if (_rtl_state != RTL_STATE_LANDED && is_mission_item_reached()) {
@@ -286,11 +340,8 @@ Delivery::return_home()
 		}
 	}
 
-	// Reset complete variable for next stage
-	_complete = false;
-
 	// Update Status now that return is complete
-	delivery_status = DELIV_DISARM;
+	advance_delivery():
 	mavlink_log_critical(mavlink_fd, "Black Hawk Has Nested");
 }
 
@@ -306,7 +357,7 @@ Delivery::shutoff();
 	}	
 
 	// Update status now that the copter is disarmed
-	delivery_status = DELIV_COMPLETE;
+	advance_delivery();
 	mavlink_log_critical(mavlink_fd, "Black Hawk Sleeping");
 }
 
@@ -332,6 +383,30 @@ arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy)
 
 	} else if (arming_res == TRANSITION_DENIED) {
 		tune_negative(true);
+	}
+}
+
+void
+Delivery::advance_delivery()
+{
+	switch(delivery_status) {
+	case DELIV_PREFLIGHT:
+		delivery_status = DELIV_ENROUTE;
+		break;
+	case DELIV_ENROUTE:
+		delivery_status = DELIV_DROPOFF;
+		break;
+	case DELIV_DROPOFF:
+		delivery_status = DELIV_RETURN;
+		break;
+	case DELIV_RETURN:
+		delivery_status = DELIV_DISARM;
+		break;
+	case DELIV_DISARM:
+		delivery_status = DELIV_COMPLETE;
+	case DELIV_COMPLETE:
+	default:
+		break;
 	}
 }
 

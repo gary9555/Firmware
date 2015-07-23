@@ -127,7 +127,13 @@ private:
 	*/
 	void arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy);
 
+	/**
+	*	Advances the delivery_status to the next stage
+	*/
+	void advance_delivery_();
+
 	bool _complete;
+	float _drop_alt;
 
 	///////////////////////////
 
