@@ -284,7 +284,7 @@ Delivery::activate_gripper()
 	// loiter at destination
 	_navigator->set_can_loiter_at_sp(true);
 	
-	// keep descending until _drop alt reached
+	// keep descending until _drop_alt reached
 	while (!_complete) {	
 		// when mission is finished then escape loop
 		_complete = is_mission_item_reached();
