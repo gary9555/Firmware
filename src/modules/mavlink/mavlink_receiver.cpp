@@ -226,9 +226,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 		handle_message_distance_sensor(msg);
     break;
 
-    case MAVLINK_MSG_ID_TEST_UORB:
+    /*case MAVLINK_MSG_ID_TEST_UORB:
         handle_message_test_uorb(msg);
-    break;
+    break;*/
 
     default:
 		break;
@@ -285,9 +285,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void MavlinkReceiver::handle_message_test_uorb(mavlink_message_t *msg)
+/*void MavlinkReceiver::handle_message_test_uorb(mavlink_message_t *msg)
 {
-    /* ca_trajectory */
+    ca_trajectory
     mavlink_test_uorb_t t;
     mavlink_msg_test_uorb_decode(msg, &t);
 
@@ -306,7 +306,7 @@ void MavlinkReceiver::handle_message_test_uorb(mavlink_message_t *msg)
     } else {
         orb_publish(ORB_ID(test_uorb), _test_uorb_pub, &f);
     }
-}
+}*/
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

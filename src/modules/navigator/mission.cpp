@@ -331,15 +331,13 @@ Mission::set_mission_items()
 	}
 
 	/* the home dist check provides user feedback, so we initialize it to this */
-<<<<<<< HEAD
 	bool user_feedback_done = false;
-=======
-	bool user_feedback_done = !home_dist_ok;
+	//bool user_feedback_done = !home_dist_ok;
     if(!_param_onboard_enabled.get())
         mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 1");
     if(!read_mission_item(true, true, &_mission_item))
         mavlink_log_critical(_navigator->get_mavlink_fd(), "hi hello you wen ti 2");
->>>>>>> 0231efd357d81f451884caeaf55d22872c9ff6f1
+
 
 	/* try setting onboard mission item */
 	if (_param_onboard_enabled.get() && read_mission_item(true, true, &_mission_item)) {
