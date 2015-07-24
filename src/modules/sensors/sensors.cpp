@@ -301,6 +301,7 @@ private:
 		float rc_assist_th;
 		float rc_auto_th;
 		float rc_posctl_th;
+		float rc_delivery_th;
 		float rc_return_th;
 		float rc_loiter_th;
 		float rc_acro_th;
@@ -308,6 +309,7 @@ private:
 		bool rc_assist_inv;
 		bool rc_auto_inv;
 		bool rc_posctl_inv;
+		bool rc_delivery_inv;
 		bool rc_return_inv;
 		bool rc_loiter_inv;
 		bool rc_acro_inv;
@@ -361,6 +363,7 @@ private:
 		param_t rc_assist_th;
 		param_t rc_auto_th;
 		param_t rc_posctl_th;
+		param_t rc_delivery_th;
 		param_t rc_return_th;
 		param_t rc_loiter_th;
 		param_t rc_acro_th;
@@ -602,6 +605,7 @@ Sensors::Sensors() :
 	_parameter_handles.rc_assist_th = param_find("RC_ASSIST_TH");
 	_parameter_handles.rc_auto_th = param_find("RC_AUTO_TH");
 	_parameter_handles.rc_posctl_th = param_find("RC_POSCTL_TH");
+	_parameter_handles.rc_delivery_th = param_find("RC_DELIVERY_TH");
 	_parameter_handles.rc_return_th = param_find("RC_RETURN_TH");
 	_parameter_handles.rc_loiter_th = param_find("RC_LOITER_TH");
 	_parameter_handles.rc_acro_th = param_find("RC_ACRO_TH");
@@ -784,6 +788,9 @@ Sensors::parameters_update()
 	param_get(_parameter_handles.rc_posctl_th, &(_parameters.rc_posctl_th));
 	_parameters.rc_posctl_inv = (_parameters.rc_posctl_th < 0);
 	_parameters.rc_posctl_th = fabs(_parameters.rc_posctl_th);
+	param_get(_parameter_handles.rc_delivery_th, &(_parameters.rc_delivery_th));
+	_parameters.rc_delivery_inv = (_parameters.rc_delivery_th < 0);
+	_parameters.rc_delivery_th = fabs(_parameters.rc_delivery_th);
 	param_get(_parameter_handles.rc_return_th, &(_parameters.rc_return_th));
 	_parameters.rc_return_inv = (_parameters.rc_return_th < 0);
 	_parameters.rc_return_th = fabs(_parameters.rc_return_th);
@@ -2023,7 +2030,7 @@ Sensors::rc_poll()
 			/* mode switches */
 			manual.mode_switch = get_rc_sw3pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_MODE, _parameters.rc_auto_th, _parameters.rc_auto_inv, _parameters.rc_assist_th, _parameters.rc_assist_inv);
 			manual.posctl_switch = get_rc_sw2pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_POSCTL, _parameters.rc_posctl_th, _parameters.rc_posctl_inv);
-			manual.return_switch = get_rc_sw2pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_RETURN, _parameters.rc_return_th, _parameters.rc_return_inv);
+			manual.return_switch = get_rc_sw3pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_RETURN, _parameters.rc_return_th, _parameters.rc_return_inv, _parameters.rc_delivery_th, _parameters.rc_delivery_inv);
 			manual.loiter_switch = get_rc_sw2pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_LOITER, _parameters.rc_loiter_th, _parameters.rc_loiter_inv);
 			manual.acro_switch = get_rc_sw2pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_ACRO, _parameters.rc_acro_th, _parameters.rc_acro_inv);
 			manual.offboard_switch = get_rc_sw2pos_position (rc_channels_s::RC_CHANNELS_FUNCTION_OFFBOARD, _parameters.rc_offboard_th, _parameters.rc_offboard_inv);

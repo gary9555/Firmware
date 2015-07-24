@@ -160,6 +160,7 @@ Navigator::Navigator() :
 	_navigation_mode_array[4] = &_engineFailure;
 	_navigation_mode_array[5] = &_gpsFailure;
 	_navigation_mode_array[6] = &_rcLoss;
+	_navigation_mode_array[7] = &_delivery;
 
 	updateParams();
 }
@@ -461,6 +462,10 @@ Navigator::task_main()
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_RTL:
 				_pos_sp_triplet_published_invalid_once = false;
 				_navigation_mode = &_rtl;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_DELIVERY:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_delivery;
 				break;
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_RTGS:
 				/* Use complex data link loss mode only when enabled via param

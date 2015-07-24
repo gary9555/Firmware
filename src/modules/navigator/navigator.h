@@ -62,6 +62,7 @@
 #include "navigator_mode.h"
 #include "mission.h"
 #include "loiter.h"
+#include "delivery.h"
 #include "rtl.h"
 #include "datalinkloss.h"
 #include "enginefailure.h"
@@ -72,7 +73,7 @@
 /**
  * Number of navigation modes that need on_active/on_inactive calls
  */
-#define NAVIGATOR_MODE_ARRAY_SIZE 7
+#define NAVIGATOR_MODE_ARRAY_SIZE 8
 
 class Navigator : public control::SuperBlock
 {
@@ -224,6 +225,7 @@ private:
 	NavigatorMode	*_navigation_mode;		/**< abstract pointer to current navigation mode class */
 	Mission		_mission;			/**< class that handles the missions */
 	Loiter		_loiter;			/**< class that handles loiter */
+	Delivery	_delivery;			/**< class that handles delivery */
 	RTL 		_rtl;				/**< class that handles RTL */
 	RCLoss 		_rcLoss;				/**< class that handles RTL according to
 							  OBC rules (rc loss mode) */

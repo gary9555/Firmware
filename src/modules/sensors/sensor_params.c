@@ -2146,6 +2146,24 @@ PARAM_DEFINE_FLOAT(RC_AUTO_TH, 0.75f);
 PARAM_DEFINE_FLOAT(RC_POSCTL_TH, 0.5f);
 
 /**
+ * Threshold for selecting delivery mode
+ *
+ * 0-1 indicate where in the full channel range the threshold sits
+ * 		0 : min
+ * 		1 : max
+ * sign indicates polarity of comparison
+ * 		positive : true when channel>th
+ * 		negative : true when channel<th
+ *
+ * @min -1
+ * @max 1
+ * @group Radio Switches
+ *
+ *
+ */
+PARAM_DEFINE_FLOAT(RC_DELIVERY_TH, 0.25f);
+
+/**
  * Threshold for selecting return to launch mode
  *
  * 0-1 indicate where in the full channel range the threshold sits
@@ -2161,7 +2179,7 @@ PARAM_DEFINE_FLOAT(RC_POSCTL_TH, 0.5f);
  *
  *
  */
-PARAM_DEFINE_FLOAT(RC_RETURN_TH, 0.5f);
+PARAM_DEFINE_FLOAT(RC_RETURN_TH, 0.75f);
 
 /**
  * Threshold for selecting loiter mode

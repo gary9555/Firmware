@@ -50,7 +50,8 @@
 #define MAIN_STATE_ACRO 6
 #define MAIN_STATE_OFFBOARD 7
 #define MAIN_STATE_STAB 8
-#define MAIN_STATE_MAX 9
+#define MAIN_STATE_DELIVERY 9
+#define MAIN_STATE_MAX 10
 #define ARMING_STATE_INIT 0
 #define ARMING_STATE_STANDBY 1
 #define ARMING_STATE_ARMED 2
@@ -77,7 +78,8 @@
 #define NAVIGATION_STATE_TERMINATION 13
 #define NAVIGATION_STATE_OFFBOARD 14
 #define NAVIGATION_STATE_STAB 15
-#define NAVIGATION_STATE_MAX 16
+#define NAVIGATION_STATE_DELIVERY 16
+#define NAVIGATION_STATE_MAX 17
 #define VEHICLE_MODE_FLAG_SAFETY_ARMED 128
 #define VEHICLE_MODE_FLAG_MANUAL_INPUT_ENABLED 64
 #define VEHICLE_MODE_FLAG_HIL_ENABLED 32
@@ -208,7 +210,8 @@ struct vehicle_status_s {
 	static const uint8_t MAIN_STATE_ACRO = 6;
 	static const uint8_t MAIN_STATE_OFFBOARD = 7;
 	static const uint8_t MAIN_STATE_STAB = 8;
-	static const uint8_t MAIN_STATE_MAX = 9;
+	static const uint8_t MAIN_STATE_DELIVERY = 9;
+	static const uint8_t MAIN_STATE_MAX = 10;
 	static const uint8_t ARMING_STATE_INIT = 0;
 	static const uint8_t ARMING_STATE_STANDBY = 1;
 	static const uint8_t ARMING_STATE_ARMED = 2;
@@ -235,7 +238,8 @@ struct vehicle_status_s {
 	static const uint8_t NAVIGATION_STATE_TERMINATION = 13;
 	static const uint8_t NAVIGATION_STATE_OFFBOARD = 14;
 	static const uint8_t NAVIGATION_STATE_STAB = 15;
-	static const uint8_t NAVIGATION_STATE_MAX = 16;
+	static const uint8_t NAVIGATION_STATE_DELIVERY = 16
+	static const uint8_t NAVIGATION_STATE_MAX = 17;
 	static const uint8_t VEHICLE_MODE_FLAG_SAFETY_ARMED = 128;
 	static const uint8_t VEHICLE_MODE_FLAG_MANUAL_INPUT_ENABLED = 64;
 	static const uint8_t VEHICLE_MODE_FLAG_HIL_ENABLED = 32;
