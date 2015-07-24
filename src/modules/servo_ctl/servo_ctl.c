@@ -68,6 +68,11 @@ struct servo_ctl_s {
 static struct servo_ctl_s *servo_ctl_data;
 static bool servo_ctl_started = false;
 
+int		set_pwm_rate(unsigned rate_map, unsigned default_rate, unsigned alt_rate);
+int		_pwm_alt_rate_channels;
+int 	_pwm_default_rate;
+int 	_pwm_alt_rate;
+
 __EXPORT int servo_ctl_main(int argc, char *argv[]);
 
 void servo_ctl_start(FAR void *arg);
@@ -152,6 +157,53 @@ int servo_ctl_main(int argc, char *argv[])
 	}
 }
 
+int set_pwm_rate(uint32_t rate_map, unsigned default_rate, unsigned alt_rate)
+{
+	for (unsigned pass = 0; pass < 2; pass++) {
+		for (unsigned group = 0; group < 6; group++) {
+
+			// get the channel mask for this rate group
+			uint32_t mask = up_pwm_servo_get_rate_group(group);
+
+			if (mask == 0)
+				continue;
+
+			// all channels in the group must be either default or alt-rate
+			uint32_t alt = rate_map & mask;
+
+			if (pass == 0) {
+				// preflight
+				if ((alt != 0) && (alt != mask)) {
+					warn("rate group %u mask %x bad overlap %x", group, mask, alt);
+					// not a legal map, bail
+					return 0;
+				}
+
+			} else {
+				// set it - errors here are unexpected
+				if (alt != 0) {
+					if (up_pwm_servo_set_rate_group_update(group, _pwm_alt_rate) != OK) {
+						warn("rate group set alt failed");
+						return 0;
+					}
+
+				} else {
+					if (up_pwm_servo_set_rate_group_update(group, _pwm_default_rate) != OK) {
+						warn("rate group set default failed");
+						return 0;
+					}
+				}
+			}
+		}
+	}
+
+	_pwm_alt_rate_channels = rate_map;
+	_pwm_default_rate = default_rate;
+	_pwm_alt_rate = alt_rate;
+
+	return OK;
+}
+
 //takes a pointer to another servo_ctl_s struct
 void servo_ctl_start(FAR void *arg)
 {
@@ -174,13 +226,25 @@ void servo_ctl_start(FAR void *arg)
 
 	/* configure GPIO pin */
 	/* px4fmu only, px4io doesn't support GPIO_SET_OUTPUT and will ignore */
-	ioctl(priv->gpio_fd, GPIO_SET_OUTPUT, priv->pin);
+	//ioctl(priv->gpio_fd, GPIO_SET_OUTPUT, priv->pin);
 
 	// sets PWM values
+
+	// initializes all FMU ports as servos, w/ magic numbers (mask value)
+	up_pwm_servo_init(0x3f);
+
+	// set initial rate
+	_pwm_default_rate = 1100;
+	_pwm_alt_rate = 1100;
+	set_pwm_rate(0, _pwm_default_rate, _pwm_alt_rate);
+
 	int ret = ioctl(priv->gpio_fd, PWM_SERVO_SET_ARM_OK, 0);
 
 	if (ret != OK) {
 		err(1, "PWM_SERVO_SET_ARM_OK");
+	}
+	else {
+		warnx("Set arm is good");
 	}
 
 	/* tell IO that the system is armed (it will output values if safety is off) */
@@ -188,6 +252,19 @@ void servo_ctl_start(FAR void *arg)
 
 	if (ret != OK) {
 		err(1, "PWM_SERVO_ARM");
+	}
+	else{
+		warnx("Armed and ready");
+	}
+
+	/* sets PWM values and activates servo */
+	ret = ioctl(priv->gpio_fd, PWM_SERVO_SET(priv->pin), 1900);
+
+	if (ret != OK) {
+		err(1, "PWM_SERVO_SET(%d)", priv->pin);
+	}
+	else{
+		warnx("you should be moving");
 	}
 
 
@@ -202,5 +279,23 @@ void servo_ctl_start(FAR void *arg)
 void servo_ctl_stop(FAR void *arg)
 {
 	FAR struct servo_ctl_s *priv = (FAR struct servo_ctl_s *)arg;
-	ioctl(priv->gpio_fd, GPIO_CLEAR, priv->pin);
+	//ioctl(priv->gpio_fd, GPIO_CLEAR, priv->pin);
+
+	//returns to original position
+	int ret = ioctl(priv->gpio_fd, PWM_SERVO_SET(priv->pin),1100);
+	if (ret != OK) {
+			err(1, "PWM_SERVO_SET(%d)", priv->pin);
+		}
+	else {
+		warnx("hold your horses");
+	}
+
+	ret = ioctl(priv->gpio_fd, PWM_SERVO_DISARM, 0);
+
+	if (ret != OK) {
+		err(1, "PWM_SERVO_DISARM");
+	}
+	else {
+		warnx("go to sleep");
+	}
 }
