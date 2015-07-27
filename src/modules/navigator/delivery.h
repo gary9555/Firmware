@@ -144,9 +144,9 @@ private:
 	int mavlink_fd;
 	bool _complete;
 	float _drop_alt;
-	struct safety_s safety;
-	struct vehicle_status_s status;
-	struct actuator_armed_s armed;
+	// struct safety_s safety;
+	// struct vehicle_status_s status;
+	// struct actuator_armed_s armed;
 
 	///////////////////////////
 
