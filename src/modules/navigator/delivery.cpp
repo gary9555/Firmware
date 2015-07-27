@@ -77,9 +77,9 @@ Delivery::Delivery(Navigator *navigator, const char *name) :
 	mavlink_fd(0),
 	_complete(false),
 	_drop_alt(5.0),
-	safety({0}),
-	status({0}),
-	armed({0}),
+	// safety({0}),
+	// status({0}),
+	// armed({0}),
 	////////////////////////////////
 	_param_onboard_enabled(this, "DEL_ONBOARD_EN", false),
 	_param_takeoff_alt(this, "DEL_TAKEOFF_ALT", false),
@@ -148,7 +148,7 @@ Delivery::on_inactive()
 			_navigator->set_mission_result_updated();
 
 			_home_inited = true;
-	}
+		}
 
 	} else {
 		/* read mission topics on initialization */
@@ -190,7 +190,6 @@ Delivery::on_active()
 			break;
 		case DELIV_ENROUTE:
 			set_delivery_items();
-			set_mission_items();
 			to_destination();
 			break;
 		case DELIV_DROPOFF:
@@ -199,7 +198,6 @@ Delivery::on_active()
 			break;
 		case DELIV_RETURN:
 			set_delivery_items();
-			set_return_home();
 			return_home();
 			break;
 		case DELIV_DISARM:
@@ -263,6 +261,10 @@ Delivery::to_destination()
 		heading_sp_update();
 	}
 
+	if (is_mission_item_reached()) {
+		_complete = true;
+	}
+
 	if (_complete) {
 		// Update status now that travel to destination is complete
 		advance_delivery();
@@ -276,53 +278,19 @@ Delivery::activate_gripper()
 	// activate the gripper script to let down the object and release
 	// status = enroute ; change to return at completion
 
-	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+	// the code for descent can be found in set_delivery_items
 
-	/* make sure we have the latest params */
-	updateParams();
-
-	set_previous_pos_setpoint();
-	_navigator->set_can_loiter_at_sp(false);
-
-	// mission_item to descend to _drop_alt
-	_mission_item.lat = _navigator->get_global_position()->lat;
-	_mission_item.lon = _navigator->get_global_position()->lon;
-	_mission_item.altitude_is_relative = false;
-	// .altitude needs to be referenced to location altitude, not home altitude
-	_mission_item.altitude = _navigator->get_home_position()->alt + _drop_alt;
-	_mission_item.yaw = NAN;
-	_mission_item.loiter_radius = _navigator->get_loiter_radius();
-	_mission_item.loiter_direction = 1;
-	_mission_item.nav_cmd = NAV_CMD_LOITER_UNLIMITED;
-	_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
-	_mission_item.time_inside = 10.0f;
-	_mission_item.pitch_min = 0.0f;
-	_mission_item.autocontinue = false;
-	_mission_item.origin = ORIGIN_ONBOARD;
-
-	// loiter at destination
-	_navigator->set_can_loiter_at_sp(true);
-	
 	// keep descending until _drop_alt reached
-	while (!_complete) {	
-		// when mission is finished then escape loop
-		_complete = is_mission_item_reached();
+	_complete = is_mission_item_reached();
+
+	if (_complete) {
+		//Drop the item by activating the servo
+		unload_package();
+
+		// Update status now that dropoff is complete
+		advance_delivery();
+		mavlink_log_critical(mavlink_fd, "The Eagle Has Landed");
 	}
-
-	//Drop the item by activating the servo
-	unload_package();
-
-	reset_mission_item_reached();
-
-	/* convert mission item to current position setpoint and make it valid */
-	mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
-	pos_sp_triplet->next.valid = false;
-
-	_navigator->set_position_setpoint_triplet_updated();
-
-	// Update status now that dropoff is complete
-	advance_delivery();
-	mavlink_log_critical(mavlink_fd, "The Eagle Has Landed");
 }
 
 void
@@ -368,25 +336,71 @@ void
 Delivery::set_delivery_items()
 {
 	// set the parameters needed for getting to the destination
-	_complete = false;
-}
+	if (delivery_status == DELIV_ENROUTE) {
 
-void
-Delivery::set_return_home()
-{
-	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
-			   + _param_return_alt.get()) {
-		_rtl_state = RTL_STATE_CLIMB;
+		set_mission_items();
 
-		/* otherwise go straight to return */
-	} else {
-		/* set altitude setpoint to current altitude */
-		_rtl_state = RTL_STATE_RETURN;
+	} else if (delivery_status == DELIV_DROPOFF) {
+
+		// setting the mission items for a descent to the _drop_alt
+		struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+
+		/* make sure we have the latest params */
+		updateParams();
+
+		set_previous_pos_setpoint();
+		_navigator->set_can_loiter_at_sp(false);
+
+		// mission_item to descend to _drop_alt
+		_mission_item.lat = _navigator->get_global_position()->lat;
+		_mission_item.lon = _navigator->get_global_position()->lon;
 		_mission_item.altitude_is_relative = false;
-		_mission_item.altitude = _navigator->get_global_position()->alt;
+		// .altitude needs to be referenced to location altitude, not home altitude
+		_mission_item.altitude = _navigator->get_home_position()->alt + _drop_alt;
+		_mission_item.yaw = NAN;
+		_mission_item.loiter_radius = _navigator->get_loiter_radius();
+		_mission_item.loiter_direction = 1;
+		_mission_item.nav_cmd = NAV_CMD_LOITER_UNLIMITED;
+		_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
+		_mission_item.time_inside = 10.0f;
+		_mission_item.pitch_min = 0.0f;
+		_mission_item.autocontinue = false;
+		_mission_item.origin = ORIGIN_ONBOARD;
+
+		mavlink_log_critical(_navigator->get_mavlink_fd(), "RTL: descend to %d m (%d m above home)",
+		(int)(_mission_item.altitude),
+		(int)(_mission_item.altitude - _navigator->get_home_position()->alt));
+
+		// loiter at destination
+		_navigator->set_can_loiter_at_sp(true);
+
+		reset_mission_item_reached();
+
+		/* convert mission item to current position setpoint and make it valid */
+		mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+		pos_sp_triplet->next.valid = false;
+
+		_navigator->set_position_setpoint_triplet_updated();
+
+	} else if (delivery_status == DELIV_RETURN) {
+
+		// setting the proper _rtl_state for current position
+		if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
+				   + _param_return_alt.get()) {
+			_rtl_state = RTL_STATE_CLIMB;
+
+			/* otherwise go straight to return */
+		} else {
+			/* set altitude setpoint to current altitude */
+			_rtl_state = RTL_STATE_RETURN;
+			_mission_item.altitude_is_relative = false;
+			_mission_item.altitude = _navigator->get_global_position()->alt;
+		}
+
+		set_rtl_item();
 	}
 
-	set_rtl_item();
+	_complete = false;
 }
 
 void
