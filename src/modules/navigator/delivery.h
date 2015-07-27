@@ -126,11 +126,6 @@ private:
 	void set_delivery_items();
 
 	/**
-	*	Items to set return home feature
-	*/
-	void set_return_home();
-
-	/**
 	*	Disarming the drone
 	*/
 	void arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy);
