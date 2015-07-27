@@ -53,6 +53,9 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/home_position.h>
+#include <uORB/topics/safety.h>
+#include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/vehicle_status.h>
 
 #include "navigator_mode.h"
 #include "mission_block.h"
@@ -74,14 +77,14 @@ public:
 	/**
 	*	Update these at the end of each phase
 	*/
-	enum delivery_status {
-		DELIV_PREFLIGHT
-		DELIV_ENROUTE
-		DELIV_DROPOFF
-		DELIV_RETURN
-		DELIV_DISARM
+	enum DELIVSTATE {
+		DELIV_PREFLIGHT,
+		DELIV_ENROUTE,
+		DELIV_DROPOFF,
+		DELIV_RETURN,
+		DELIV_DISARM,
 		DELIV_COMPLETE
-	}
+	} delivery_status;
 
 	enum mission_altitude_mode {
 		MISSION_ALTMODE_ZOH = 0,
@@ -123,6 +126,11 @@ private:
 	void set_delivery_items();
 
 	/**
+	*	Items to set return home feature
+	*/
+	void set_return_home();
+
+	/**
 	*	Disarming the drone
 	*/
 	void arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy);
@@ -130,15 +138,20 @@ private:
 	/**
 	*	Advances the delivery_status to the next stage
 	*/
-	void advance_delivery_();
+	void advance_delivery();
 
 	/**
 	*	Activates the servo
 	*/
 	void unload_package();
 
+	/* Mavlink file descriptor */
+	int mavlink_fd;
 	bool _complete;
 	float _drop_alt;
+	struct safety_s safety;
+	struct vehicle_status_s status;
+	struct actuator_armed_s armed;
 
 	///////////////////////////
 
@@ -274,4 +287,6 @@ private:
 	control::BlockParamFloat _param_descend_alt;
 	control::BlockParamFloat _param_land_delay;
 
-}
+};
+
+#endif

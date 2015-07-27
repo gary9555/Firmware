@@ -42,7 +42,7 @@ uint8 NAVIGATION_STATE_DESCEND = 12		# Descend mode (no position control)
 uint8 NAVIGATION_STATE_TERMINATION = 13		# Termination mode
 uint8 NAVIGATION_STATE_OFFBOARD = 14
 uint8 NAVIGATION_STATE_STAB = 15		# Stabilized mode
-uint8 NAVIGATION_STATE_STAB = 16		# Delivery Mode
+uint8 NAVIGATION_STATE_DELIVERY = 16		# Delivery Mode
 uint8 NAVIGATION_STATE_MAX = 17
 
 # VEHICLE_MODE_FLAG, same as MAV_MODE_FLAG of MAVLink 1.0 protocol

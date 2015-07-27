@@ -57,23 +57,35 @@
 
 #include <uORB/uORB.h>
 #include <uORB/topics/mission.h>
+#include <uORB/topics/safety.h>
+#include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/home_position.h>
 #include <uORB/topics/mission_result.h>
+
+#include <commander/state_machine_helper.h>
 
 #include <mavlink/mavlink_log.h>
 
 #include "navigator.h"
 #include "delivery.h"
 
+#define DELAY_SIGMA	0.01f
+
 Delivery::Delivery(Navigator *navigator, const char *name) :
-	MissionBlock(Navigator, name),
+	MissionBlock(navigator, name),
+	mavlink_fd(0),
 	_complete(false),
 	_drop_alt(5.0),
+	safety({0}),
+	status({0}),
+	armed({0}),
 	////////////////////////////////
-	_param_takeoff_alt(this, "MIS_TAKEOFF_ALT", false),
-	_param_dist_1wp(this, "MIS_DIST_1WP", false),
-	_param_altmode(this, "MIS_ALTMODE", false),
-	_param_yawmode(this, "MIS_YAWMODE", false),
+	_param_onboard_enabled(this, "DEL_ONBOARD_EN", false),
+	_param_takeoff_alt(this, "DEL_TAKEOFF_ALT", false),
+	_param_dist_1wp(this, "DEL_DIST_1WP", false),
+	_param_altmode(this, "DEL_ALTMODE", false),
+	_param_yawmode(this, "DEL_YAWMODE", false),
 	_onboard_mission({0}),
 	_offboard_mission({0}),
 	_current_onboard_mission_index(-1),
@@ -90,15 +102,14 @@ Delivery::Delivery(Navigator *navigator, const char *name) :
 	_distance_current_previous(0.0f),
 	////////////////////////////////
 	_rtl_state(RTL_STATE_NONE),
-	_param_return_alt(this, "RTL_RETURN_ALT", false),
-	_param_descend_alt(this, "RTL_DESCEND_ALT", false),
-	_param_land_delay(this, "RTL_LAND_DELAY", false)
+	_param_return_alt(this, "DEL_RETURN_ALT", false),
+	_param_descend_alt(this, "DEL_DESCEND_ALT", false),
+	_param_land_delay(this, "DEL_LAND_DELAY", false)
 {
 	/* load initial params */
 	updateParams();
 }
 
-void
 Delivery::~Delivery()
 {
 }
@@ -173,23 +184,29 @@ Delivery::on_active()
 {
 	//check for delivery_status and run through delivery routine
 	switch(delivery_status){
-		case delivery_status::DELIV_PREFLIGHT:
+		case DELIV_PREFLIGHT:
 			set_delivery_items();
 			advance_delivery();
 			break;
-		case delivery_status::DELIV_ENROUTE:
+		case DELIV_ENROUTE:
+			set_delivery_items();
+			set_mission_items();
 			to_destination();
 			break;
-		case delivery_status::DELIV_DROPOFF:
+		case DELIV_DROPOFF:
+			set_delivery_items();
 			activate_gripper();
 			break;
-		case delivery_status::DELIV_RETURN:
+		case DELIV_RETURN:
+			set_delivery_items();
+			set_return_home();
 			return_home();
 			break;
-		case delivery_status::DELIV_DISARM:
+		case DELIV_DISARM:
+			set_delivery_items();
 			shutoff();
 			break;
-		case delivery_status::DELIV_COMPLETE:
+		case DELIV_COMPLETE:
 		default:
 			break;
 	}
@@ -201,52 +218,56 @@ Delivery::to_destination()
 	// set a mission to destination with takeoff enabled
 	// Status = enroute ; change to Dropoff at completion
 
-	set_delivery_items();
+	/* check if missions have changed so that feedback to ground station is given */
+	bool onboard_updated = false;
+	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);
+	if (onboard_updated) {
+		update_onboard_mission();
+	}
 
-	while (!_complete) {
-		/* check if anything has changed */
-		bool offboard_updated = false;
-		orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
-		if (offboard_updated) {
-			update_offboard_mission();
-		}
+	bool offboard_updated = false;
+	orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
+	if (offboard_updated) {
+		update_offboard_mission();
+	}
 
-		/* reset mission items if needed */
-		if (onboard_updated || offboard_updated) {
+	/* reset mission items if needed */
+	if (onboard_updated || offboard_updated) {
+		set_mission_items();
+	}
+
+	/* lets check if we reached the current mission item */
+	if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
+		set_mission_item_reached();
+		if (_mission_item.autocontinue) {
+			/* switch to next waypoint if 'autocontinue' flag set */
+			advance_mission();
 			set_mission_items();
+
 		}
 
-		/* lets check if we reached the current mission item */
-		if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
-			set_mission_item_reached();
-			if (_mission_item.autocontinue) {
-				/* switch to next waypoint if 'autocontinue' flag set */
-				advance_mission();
-				set_mission_items();
-
-			}
-
-		} else if (_mission_type != MISSION_TYPE_NONE &&_param_altmode.get() == MISSION_ALTMODE_FOH) {
-			altitude_sp_foh_update();
-		} else {
-			/* if waypoint position reached allow loiter on the setpoint */
-			if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
-				_navigator->set_can_loiter_at_sp(true);
-				_complete = true;
-			}
-		}
-
-		/* see if we need to update the current yaw heading for rotary wing types */
-		if (_navigator->get_vstatus()->is_rotary_wing 
-				&& _param_yawmode.get() != MISSION_YAWMODE_NONE
-				&& _mission_type != MISSION_TYPE_NONE) {
-			heading_sp_update();
+	} else if (_mission_type != MISSION_TYPE_NONE &&_param_altmode.get() == MISSION_ALTMODE_FOH) {
+		altitude_sp_foh_update();
+	} else {
+		/* if waypoint position reached allow loiter on the setpoint */
+		if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
+			_navigator->set_can_loiter_at_sp(true);
+			_complete = true;
 		}
 	}
 
-	// Update status now that travel to destination is complete
-	advance_delivery();
-	mavlink_log_critical(mavlink_fd, "Black Hawk at Location");
+	/* see if we need to update the current yaw heading for rotary wing types */
+	if (_navigator->get_vstatus()->is_rotary_wing 
+			&& _param_yawmode.get() != MISSION_YAWMODE_NONE
+			&& _mission_type != MISSION_TYPE_NONE) {
+		heading_sp_update();
+	}
+
+	if (_complete) {
+		// Update status now that travel to destination is complete
+		advance_delivery();
+		mavlink_log_critical(mavlink_fd, "Black Hawk at Location");
+	}
 }
 
 void
@@ -254,8 +275,6 @@ Delivery::activate_gripper()
 {
 	// activate the gripper script to let down the object and release
 	// status = enroute ; change to return at completion
-
-	set_delivery_items();
 
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
@@ -313,50 +332,32 @@ Delivery::return_home()
 	// should halt/switch to loiter if collision_imminent is true
 	// status = return ; change to complete
 
-	set_delivery_items();
-
-	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
-			   + _param_return_alt.get()) {
-		_rtl_state = RTL_STATE_CLIMB;
-
-		/* otherwise go straight to return */
-	} else {
-		/* set altitude setpoint to current altitude */
-		_rtl_state = RTL_STATE_RETURN;
-		_mission_item.altitude_is_relative = false;
-		_mission_item.altitude = _navigator->get_global_position()->alt;
+	if (_rtl_state != RTL_STATE_LANDED && is_mission_item_reached()) {
+		advance_rtl();
+		set_rtl_item();
 	}
 
-	set_rtl_item();
-
-	while (!_complete) {
-		if (_rtl_state != RTL_STATE_LANDED && is_mission_item_reached()) {
-			advance_rtl();
-			set_rtl_item();
-		}
-
-		if (_rtl_state = RTL_STATE_LANDED) {
-			_complete = true;
-		}
+	if (_rtl_state == RTL_STATE_LANDED) {
+		_complete = true;
 	}
 
-	// Update Status now that return is complete
-	advance_delivery():
-	mavlink_log_critical(mavlink_fd, "Black Hawk Has Nested");
+	if (_complete) {
+		// Update Status now that return is complete
+		advance_delivery();
+		mavlink_log_critical(mavlink_fd, "Black Hawk Has Nested");
+	}
 }
 
 void
-Delivery::shutoff();
+Delivery::shutoff()
 {
-	set_delivery_items();
-
 	// Disarm the drone when it is done with the landing
 	// look at commander 380
-	if (_navigator->get_vstatus()->condition_landed) {
-		int mavlink_fd_local = px4_open(MAVLINK_LOG_DEVICE, 0);
-		arm_disarm(false, mavlink_fd_local, "Delivery.cpp");
-		px4_close(mavlink_fd_local);
-	}	
+			// if (_navigator->get_vstatus()->condition_landed) {
+			// 	int mavlink_fd_local = px4_open(MAVLINK_LOG_DEVICE, 0);
+			// 	arm_disarm(false, mavlink_fd_local, "Delivery.cpp");
+			// 	px4_close(mavlink_fd_local);
+			// }	
 
 	// Update status now that the copter is disarmed
 	advance_delivery();
@@ -371,21 +372,39 @@ Delivery::set_delivery_items()
 }
 
 void
-arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy)
+Delivery::set_return_home()
 {
-	transition_result_t arming_res = TRANSITION_NOT_CHANGED;
+	if (_navigator->get_global_position()->alt < _navigator->get_home_position()->alt
+			   + _param_return_alt.get()) {
+		_rtl_state = RTL_STATE_CLIMB;
 
-	// Transition the armed state. By passing mavlink_fd to arming_state_transition it will
-	// output appropriate error messages if the state cannot transition.
-	arming_res = arming_state_transition(&status, &safety, arm ? vehicle_status_s::ARMING_STATE_ARMED : vehicle_status_s::ARMING_STATE_STANDBY, &armed,
-					     true /* fRunPreArmChecks */, mavlink_fd_local);
-
-	if (arming_res == TRANSITION_CHANGED && mavlink_fd) {
-		mavlink_log_info(mavlink_fd_local, "[cmd] %s by %s", arm ? "ARMED" : "DISARMED", armedBy);
-
-	} else if (arming_res == TRANSITION_DENIED) {
-		tune_negative(true);
+		/* otherwise go straight to return */
+	} else {
+		/* set altitude setpoint to current altitude */
+		_rtl_state = RTL_STATE_RETURN;
+		_mission_item.altitude_is_relative = false;
+		_mission_item.altitude = _navigator->get_global_position()->alt;
 	}
+
+	set_rtl_item();
+}
+
+void
+Delivery::arm_disarm(bool arm, const int mavlink_fd_local, const char *armedBy)
+{
+	// transition_result_t arming_res = TRANSITION_NOT_CHANGED;
+
+	// // Transition the armed state. By passing mavlink_fd to arming_state_transition it will
+	// // output appropriate error messages if the state cannot transition.
+	// arming_res = arming_state_transition(&status, &safety, vehicle_status_s::ARMING_STATE_STANDBY, &armed,
+	// 				     false , mavlink_fd_local);
+
+	// if (arming_res == TRANSITION_CHANGED && mavlink_fd) {
+	// 	mavlink_log_info(mavlink_fd_local, "[cmd] %s by %s", arm ? "ARMED" : "DISARMED", armedBy);
+
+	// } else if (arming_res == TRANSITION_DENIED) {
+	// 	mavlink_log_critical(mavlink_fd, "Cannot Disarm");
+	// }
 }
 
 void

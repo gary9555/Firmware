@@ -56,7 +56,7 @@
  * @unit meters
  * @group Mission
  */
-PARAM_DEFINE_FLOAT(MIS_TAKEOFF_ALT, 15.0f);
+PARAM_DEFINE_FLOAT(DEL_TAKEOFF_ALT, 15.0f);
 
 /**
  * Enable persistent onboard mission storage
@@ -68,7 +68,7 @@ PARAM_DEFINE_FLOAT(MIS_TAKEOFF_ALT, 15.0f);
  * @max 1
  * @group Mission
  */
-PARAM_DEFINE_INT32(MIS_ONBOARD_EN, 1);
+PARAM_DEFINE_INT32(DEL_ONBOARD_EN, 1);
 
 /**
  * Maximal horizontal distance from home to first waypoint
@@ -81,7 +81,7 @@ PARAM_DEFINE_INT32(MIS_ONBOARD_EN, 1);
  * @max 1000
  * @group Mission
  */
-PARAM_DEFINE_FLOAT(MIS_DIST_1WP, 900);
+PARAM_DEFINE_FLOAT(DEL_DIST_1WP, 900);
 
 /**
  * Altitude setpoint mode
@@ -94,7 +94,7 @@ PARAM_DEFINE_FLOAT(MIS_DIST_1WP, 900);
  * @max 1
  * @group Mission
  */
-PARAM_DEFINE_INT32(MIS_ALTMODE, 1);
+PARAM_DEFINE_INT32(DEL_ALTMODE, 1);
 
 /**
  * Multirotor only. Yaw setpoint mode.
@@ -110,7 +110,7 @@ PARAM_DEFINE_INT32(MIS_ALTMODE, 1);
  * @max 3
  * @group Mission
  */
-PARAM_DEFINE_INT32(MIS_YAWMODE, 1);
+PARAM_DEFINE_INT32(DEL_YAWMODE, 1);
 
 /*
  * RTL parameters, accessible via MAVLink
@@ -126,7 +126,7 @@ PARAM_DEFINE_INT32(MIS_YAWMODE, 1);
  * @max 150
  * @group Return To Land
  */
-PARAM_DEFINE_FLOAT(RTL_RETURN_ALT, 60);
+PARAM_DEFINE_FLOAT(DEL_RETURN_ALT, 60);
 
 
 /**
@@ -140,7 +140,7 @@ PARAM_DEFINE_FLOAT(RTL_RETURN_ALT, 60);
  * @max 100
  * @group Return To Land
  */
-PARAM_DEFINE_FLOAT(RTL_DESCEND_ALT, 10);
+PARAM_DEFINE_FLOAT(DEL_DESCEND_ALT, 10);
 
 /**
  * RTL delay
@@ -153,4 +153,4 @@ PARAM_DEFINE_FLOAT(RTL_DESCEND_ALT, 10);
  * @max 300
  * @group Return To Land
  */
-PARAM_DEFINE_FLOAT(RTL_LAND_DELAY, 1);
+PARAM_DEFINE_FLOAT(DEL_LAND_DELAY, 1);

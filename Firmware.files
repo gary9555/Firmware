@@ -9962,6 +9962,9 @@ src/modules/mc_pos_control_multiplatform/mc_pos_control_start_nuttx.cpp
 src/modules/navigator/datalinkloss.cpp
 src/modules/navigator/datalinkloss.h
 src/modules/navigator/datalinkloss_params.c
+src/modules/navigator/delivery.h
+src/modules/navigator/delivery.cpp
+src/modules/navigator/delivery_params.c
 src/modules/navigator/enginefailure.cpp
 src/modules/navigator/enginefailure.h
 src/modules/navigator/geofence.cpp
@@ -10694,6 +10697,9 @@ src/modules/mc_pos_control_multiplatform/mc_pos_control_start_nuttx.cpp
 src/modules/navigator/datalinkloss.cpp
 src/modules/navigator/datalinkloss.h
 src/modules/navigator/datalinkloss_params.c
+src/modules/navigator/delivery.h
+src/modules/navigator/delivery.cpp
+src/modules/navigator/delivery_params.c
 src/modules/navigator/enginefailure.cpp
 src/modules/navigator/enginefailure.h
 src/modules/navigator/geofence.cpp
@@ -18450,6 +18456,9 @@ src/modules/mc_pos_control_multiplatform/mc_pos_control_start_nuttx.cpp
 src/modules/navigator/datalinkloss.cpp
 src/modules/navigator/datalinkloss.h
 src/modules/navigator/datalinkloss_params.c
+src/modules/navigator/delivery.h
+src/modules/navigator/delivery.cpp
+src/modules/navigator/delivery_params.c
 src/modules/navigator/enginefailure.cpp
 src/modules/navigator/enginefailure.h
 src/modules/navigator/geofence.cpp
@@ -26527,6 +26536,9 @@ src/modules/mc_pos_control_multiplatform/mc_pos_control_start_nuttx.cpp
 src/modules/navigator/datalinkloss.cpp
 src/modules/navigator/datalinkloss.h
 src/modules/navigator/datalinkloss_params.c
+src/modules/navigator/delivery.h
+src/modules/navigator/delivery.cpp
+src/modules/navigator/delivery_params.c
 src/modules/navigator/enginefailure.cpp
 src/modules/navigator/enginefailure.h
 src/modules/navigator/geofence.cpp

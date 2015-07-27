@@ -138,6 +138,7 @@ Navigator::Navigator() :
 	_navigation_mode(nullptr),
 	_mission(this, "MIS"),
 	_loiter(this, "LOI"),
+	_delivery(this, "DEL"),
 	_rtl(this, "RTL"),
 	_rcLoss(this, "RCL"),
 	_dataLinkLoss(this, "DLL"),
