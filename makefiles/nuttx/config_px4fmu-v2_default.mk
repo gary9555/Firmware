@@ -74,6 +74,7 @@ MODULES		+= modules/gpio_led
 MODULES		+= modules/uavcan
 MODULES 	+= modules/land_detector
 MODULES		+= modules/camera_trigger
+MODULES		+= modules/servo_ctl
 
 #
 # Estimation modules (EKF/ SO3 / other filters)
